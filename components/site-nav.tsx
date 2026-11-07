@@ -53,6 +53,7 @@ function ActiveLinks({ close }: { close: () => void }) {
 
 export function SiteNav() {
   const [open, setOpen] = useState(false);
+  const signedIn = !!useAccount().user;
   const close = () => setOpen(false);
   // The address is URL data: read it inside <Suspense> so pages can still be prerendered.
   const menu = (
@@ -64,7 +65,7 @@ export function SiteNav() {
   const account = <Account close={() => setOpen(false)} />;
 
   const logo = (
-    <Link href="/" onClick={() => setOpen(false)} className="font-heading text-2xl font-bold text-white">
+    <Link href={signedIn ? "/home" : "/"} onClick={() => setOpen(false)} className="font-heading text-2xl font-bold text-white">
       ChessSite
     </Link>
   );

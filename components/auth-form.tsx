@@ -30,15 +30,15 @@ export function AuthForm({ mode: start }: { mode: "login" | "signup" }) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { username }, emailRedirectTo: `${location.origin}/` },
+          options: { data: { username }, emailRedirectTo: `${location.origin}/home` },
         });
         if (error) return setMsg({ ok: false, text: error.message });
         if (!data.session) return setMsg({ ok: true, text: "Check your email and click the link to confirm your account." });
-        router.push("/");
+        router.push("/home");
       } else if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) return setMsg({ ok: false, text: error.message === "Invalid login credentials" ? "Wrong email or password." : error.message });
-        router.push("/");
+        router.push("/home");
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
         if (error) return setMsg({ ok: false, text: error.message });
@@ -101,7 +101,7 @@ export function AuthForm({ mode: start }: { mode: "login" | "signup" }) {
                 .then((r) => r.json())
                 .catch(() => null);
               if (!settings?.external?.google) return setMsg({ ok: false, text: "Google sign-in isn't switched on yet. Use email for now." });
-              const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/` } });
+              const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/home` } });
               if (error) setMsg({ ok: false, text: error.message });
             }}
           >
@@ -142,7 +142,7 @@ export function ResetPassword() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) return setMsg({ ok: false, text: error.message.includes("session") ? "This link has expired. Ask for a new one on the Log in page." : error.message });
     setMsg({ ok: true, text: "Password changed. Taking you home…" });
-    setTimeout(() => router.push("/"), 1200);
+    setTimeout(() => router.push("/home"), 1200);
   }
   return (
     <PlainPage title="Choose a new password">

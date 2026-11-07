@@ -346,7 +346,26 @@ export function Dashboard() {
 }
 
 /** Home: the dashboard for signed-in players, the marketing page (passed in) for guests and while checking. */
+/** "/" for guests is the marketing page; signed-in players are sent to their dashboard at /home (like chess.com). */
 export function HomeSwitch({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const { user, ready } = useAccount();
-  return ready && user ? <Dashboard /> : children;
+  useEffect(() => {
+    if (ready && user) router.replace("/home");
+  }, [ready, user, router]);
+  return children;
+}
+
+/** /home: the dashboard, or off to Log in for guests. Also tidies the "#" Google login leaves on the address. */
+export function HomePage() {
+  const router = useRouter();
+  const { user, ready } = useAccount();
+  useEffect(() => {
+    // Through Next's router: a plain history.replaceState gets the "#" put back by Next's own address sync.
+    if (ready && location.href.endsWith("#")) router.replace(location.pathname + location.search);
+  }, [ready, user, router]);
+  useEffect(() => {
+    if (ready && !user) router.replace("/login");
+  }, [ready, user, router]);
+  return user ? <Dashboard /> : <div className="p-6 text-muted-foreground">Loading…</div>;
 }
