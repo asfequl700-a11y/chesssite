@@ -17,6 +17,8 @@ export type Profile = {
   rush_best_5: number;
   puzzles_solved: number;
   active_days: string[]; // "YYYY-MM-DD", local dates
+  skill: number | null; // self-rated 1-100 on the welcome screen
+  onboarded: boolean;
 };
 
 type Account = { user: User | null; profile: Profile | null; ready: boolean };
@@ -68,3 +70,6 @@ export async function updateProfile(patch: Partial<Pick<Profile, "puzzle_rating"
 
 /** Current profile (null for guests), for code outside React. */
 export const currentProfile = () => current.profile;
+
+/** Reload the profile from the database (after a change made by a database function). */
+export const refreshProfile = () => loadProfile(current.user);

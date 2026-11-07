@@ -398,7 +398,11 @@ export function HomeSwitch({ children }: { children: React.ReactNode }) {
 /** /home: the dashboard, or off to Log in for guests. Also tidies the "#" Google login leaves on the address. */
 export function HomePage() {
   const router = useRouter();
-  const { user, ready } = useAccount();
+  const { user, profile, ready } = useAccount();
+  useEffect(() => {
+    // New accounts (and older ones from before the welcome screen) pick a username and level first.
+    if (profile && !profile.onboarded) router.replace("/welcome");
+  }, [profile, router]);
   useEffect(() => {
     // Through Next's router: a plain history.replaceState gets the "#" put back by Next's own address sync.
     if (ready && location.href.endsWith("#")) router.replace(location.pathname + location.search);
@@ -407,10 +411,10 @@ export function HomePage() {
     if (ready && !user) router.replace("/login");
     // Opened an invite link while logged out: go back to it after logging in.
     const back = sessionStorage.getItem("after-login");
-    if (ready && user && back) {
+    if (ready && user && back && profile?.onboarded) {
       sessionStorage.removeItem("after-login");
       router.replace(back);
     }
-  }, [ready, user, router]);
-  return user ? <Dashboard /> : <div className="p-6 text-muted-foreground">Loading…</div>;
+  }, [ready, user, profile, router]);
+  return user && profile?.onboarded ? <Dashboard /> : <div className="p-6 text-muted-foreground">Loading…</div>;
 }

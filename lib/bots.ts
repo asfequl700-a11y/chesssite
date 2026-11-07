@@ -121,3 +121,6 @@ export async function botMove(engine: Engine, bot: Bot, fen: string, rand = Math
   ok.sort((a, b) => styleScore(bot.style, fen, b.best) - styleScore(bot.style, fen, a.best));
   return ok[0]?.best ?? lines[0].best;
 }
+
+/** The bot whose rating is closest to `rating` (first opponent after the welcome screen). */
+export const botNear = (rating: number) => BOTS.reduce((best, b) => (Math.abs(b.rating - rating) < Math.abs(best.rating - rating) ? b : best));

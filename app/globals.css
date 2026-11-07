@@ -99,3 +99,21 @@
 .move-list .move { justify-self: start; padding: 0 4px; line-height: 24px; border-radius: 2px; border-bottom: 3px solid transparent; color: rgba(255, 255, 255, 0.72); text-align: left; }
 .move-list button.move:hover { color: #fff; }
 .move-list .move.selected { background: rgba(255, 255, 255, 0.14); border-bottom-color: rgba(255, 255, 255, 0.1); color: #fff; }
+
+/* Welcome screen: level slider in the site's green (filled part follows --p), with a number bubble. */
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(.96); opacity: .6; } 100% { transform: scale(1); opacity: 1; } }
+.level-slider input[type="range"] { appearance: none; height: 14px; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(90deg, #5d9948, #81b64c) 0 0 / var(--p) 100% no-repeat, #3a3835; }
+.level-slider input[type="range"]::-webkit-slider-thumb { appearance: none; width: 32px; height: 32px; border-radius: 50%;
+  background: #fff; border: 5px solid #81b64c; box-shadow: 0 3px 0 #45753c, 0 4px 12px rgba(0,0,0,.4); transition: transform .15s; }
+.level-slider input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+.level-slider input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff;
+  border: 5px solid #81b64c; box-shadow: 0 3px 0 #45753c; }
+.level-slider input[type="range"]:focus-visible { outline: 2px solid #81b64c; outline-offset: 6px; }
+.level-bubble { position: absolute; top: 0; left: calc(16px + (100% - 32px) * var(--pn)); transform: translateX(-50%);
+  min-width: 3rem; padding: 4px 10px; border-radius: 8px; background: #81b64c; color: #fff; font-weight: 800; font-size: 1.25rem; text-align: center;
+  box-shadow: 0 3px 0 #45753c; }
+.level-bubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+  border: 6px solid transparent; border-bottom: 0; border-top-color: #81b64c; }
+@media (prefers-reduced-motion: reduce) { .animate-\[rise_\.35s_ease-out\], .animate-\[pop_\.3s_ease-out\] { animation: none; } }

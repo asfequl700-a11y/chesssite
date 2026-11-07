@@ -5,7 +5,8 @@ import { captured, clockText, ruleResult } from "../lib/game.ts";
 import { LESSONS } from "../lib/lessons.ts";
 import { accuracySeries, tally, totals } from "../lib/stats.ts";
 import { explainBad, explainGood } from "../lib/explain.ts";
-import { BOTS, botMove, styleScore } from "../lib/bots.ts";
+import { BOTS, botMove, botNear, styleScore } from "../lib/bots.ts";
+import { levelInfo, levelRating } from "../lib/level.ts";
 import { difficultyFor, eloUpdate, rushDifficulty } from "../lib/puzzles.ts";
 import { lastWeek, streak } from "../lib/streak.ts";
 import { applyAction, timeLeft, type GameRow } from "../supabase/functions/_shared/online-rules.ts";
@@ -119,4 +120,8 @@ assert.equal(ok(applyAction(orow({ moves: ["e2e4"] }), { type: "abort" }, Bk, T0
 assert.equal(err(applyAction(orow({ moves: ["e2e4", "e7e5"] }), { type: "abort" }, W, T0)), "Too late to abort: resign instead.");
 assert.equal(ok(applyAction(orow(), { type: "resign" }, W, T0)).result, "b");
 assert.equal(err(applyAction(orow({ status: "over" }), { type: "move", uci: "e2e4" }, W, T0)), "This game is not being played.");
+// Welcome-screen level: 1 → 400, 100 → 2000; labels by band; nearest bot.
+assert.deepEqual([levelRating(1), levelRating(100), levelRating(50)], [400, 2000, 1192]);
+assert.deepEqual([1, 15, 16, 60, 61, 100].map((l) => levelInfo(l).label), ["New to chess", "New to chess", "Beginner", "Intermediate", "Advanced", "Expert"]);
+assert.deepEqual([botNear(400).id, botNear(1192).id, botNear(2000).id], ["rosa", "mei", "zara"]);
 console.log("game checks passed");

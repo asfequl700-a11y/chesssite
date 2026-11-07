@@ -16,7 +16,8 @@ import { judgeMove, openingSet, score } from "@/lib/run-review";
 import { GraduationCap } from "lucide-react";
 import { BotAvatar } from "@/components/bot-avatar";
 import { BotPicker } from "@/components/bot-picker";
-import { BOTS, botMove as pickBotMove } from "@/lib/bots";
+import { BOTS, botMove as pickBotMove, botNear } from "@/lib/bots";
+import { levelRating } from "@/lib/level";
 import { winChance } from "@/lib/review";
 import { updateProfile, useAccount } from "@/lib/supabase";
 
@@ -59,6 +60,13 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const [chat, setChat] = useState("");
   const userWin = useRef(50); // your win chance after your last move, to notice blunders for the bot's chat
   const { profile } = useAccount();
+  // First visit: start on the bot nearest your welcome-screen level (you can still pick any bot).
+  const pickedBot = useRef(false);
+  useEffect(() => {
+    if (pickedBot.current || !profile?.skill) return;
+    pickedBot.current = true;
+    setBotId(botNear(levelRating(profile.skill)).id);
+  }, [profile]);
   const [thinking, setThinking] = useState(false);
   const [view, setView] = useState<number | null>(null); // ply being looked at, null = live position
   const [ended, setEnded] = useState<Result | null>(null); // resign, draw agreed, time out
