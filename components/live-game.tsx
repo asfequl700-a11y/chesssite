@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Engine } from "@/lib/engine";
 import { ruleResult, type Result } from "@/lib/game";
 import { saveGame } from "@/lib/games";
+import { LABELS, fenKey } from "@/lib/review";
+import { judgeMove, openingSet, score } from "@/lib/run-review";
+import { GraduationCap } from "lucide-react";
 
 // Bot levels: Stockfish "Skill Level" (0-20) and thinking time in ms.
 const LEVELS = [
@@ -25,6 +28,8 @@ const LEVELS = [
 const clockNow = () => Date.now();
 const TIMES = [0, 1, 3, 5, 10]; // minutes per side, 0 = no clock (vs friend only)
 const PREMOVE = "rgba(244,42,50,.5)";
+const YELLOW = "rgba(255,255,51,.5)";
+const HINT = "rgba(38,194,163,.6)";
 
 export function statusText(g: Chess) {
   const side = g.turn() === "w" ? "White" : "Black";
@@ -44,6 +49,7 @@ export function useReviewGame() {
 
 const name = (c: "w" | "b") => (c === "w" ? "White" : "Black");
 type Move = { from: string; to: string };
+type Judged = ReturnType<typeof judgeMove>;
 
 export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const game = useRef(new Chess());
@@ -59,6 +65,13 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const [minutes, setMinutes] = useState(0);
   const premove = useRef<Move | null>(null);
   const [pm, setPm] = useState<Move | null>(null); // premove, for display
+  // Play Coach (vs computer): label + coach line after each of your moves, hints, best-move arrow, blunder warning.
+  const [coachOn, setCoachOn] = useState(false);
+  const [coach, setCoach] = useState<Judged | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [warn, setWarn] = useState(false); // blunder: waiting for Take back / Continue
+  const [hint, setHint] = useState<{ from: string; to: string; step: 1 | 2 } | null>(null);
+  const [bestArrow, setBestArrow] = useState<{ from: string; to: string } | null>(null);
   const clock = useRef({ w: 0, b: 0, since: 0 }); // ms left; `since` = when the running clock started
   const [now, setNow] = useState(0);
   const review = useReviewGame();
@@ -155,9 +168,49 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     moved(ng);
   };
 
+  /** Coach: judge the move you just played, then let the bot reply (or pause on a blunder). */
+  const coachMove = async (ng: Chess) => {
+    const e = engine.current;
+    const m = ng.history({ verbose: true }).at(-1);
+    if (!e || !m) return void botMove(ng);
+    const fen = ng.fen();
+    setCoachBusy(true);
+    const before = await score(e, new Chess(m.before), 10);
+    const now = await score(e, ng, 10);
+    const book = ng.history().length <= 20 && (await openingSet()).has(fenKey(fen));
+    setCoachBusy(false);
+    if (game.current !== ng || ng.fen() !== fen) return; // taken back / new game meanwhile
+    const j = judgeMove(m, ng, before, now, book);
+    setCoach(j);
+    if (j.label === "blunder" && !ng.isGameOver()) return setWarn(true);
+    void botMove(ng);
+  };
+
+  const engineBest = async () => {
+    const e = engine.current;
+    if (!e) return null;
+    const fen = g.fen();
+    const s = await score(e, g, 12);
+    if (game.current.fen() !== fen || !s.best) return null;
+    return { from: s.best.slice(0, 2), to: s.best.slice(2, 4) };
+  };
+
+  const onHint = async () => {
+    if (hint) return setHint({ ...hint, step: 2 }); // second press: show the target square too
+    const b = await engineBest();
+    if (b) setHint({ ...b, step: 1 });
+  };
+
+  const takeBack = () => {
+    g.undo();
+    setWarn(false);
+    setCoach(null);
+    setFen(g.fen());
+  };
+
   const onMove = (from: string, to: string, promotion?: Promo) => {
-    if (result) return false;
-    if (mode === "computer" && (thinking || g.turn() !== me)) {
+    if (result || warn) return false;
+    if (mode === "computer" && (thinking || coachBusy || g.turn() !== me)) {
       setPremove({ from, to });
       return false;
     }
@@ -167,7 +220,9 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
       return false;
     }
     moved(g);
-    if (mode === "computer") void botMove(g);
+    setHint(null);
+    setBestArrow(null);
+    if (mode === "computer") void (coachOn ? coachMove(g) : botMove(g));
     return true;
   };
 
@@ -179,6 +234,7 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     setClosed(false);
     setPremove(null);
     setView(null);
+    clearCoach();
     setFen(ng.fen());
     return ng;
   };
@@ -194,9 +250,17 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     g.undo();
     if (mode === "computer" && g.turn() !== me) g.undo(); // also take back the computer's move
     setPremove(null);
+    clearCoach();
     setView(null);
     setFen(g.fen());
   };
+
+  function clearCoach() {
+    setCoach(null);
+    setWarn(false);
+    setHint(null);
+    setBestArrow(null);
+  }
 
   const resign = () => {
     const loser = mode === "computer" ? me : g.turn();
@@ -230,6 +294,7 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
       clock={timed ? { ms: left(c), running: running && g.turn() === c } : undefined}
     />
   );
+  const myTurnIdle = !result && !thinking && !coachBusy && !warn && !shown && g.turn() === me;
   const title = !result
     ? ""
     : result.winner === null
@@ -240,6 +305,14 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
           : "You lost"
         : `${name(result.winner)} won`;
 
+  // Square colours: premove (red), hint (teal: the piece, then its square), else the last move (yellow).
+  const last = (shown ?? g).history({ verbose: true }).at(-1);
+  const highlight = pm
+    ? { [pm.from]: PREMOVE, [pm.to]: PREMOVE }
+    : hint && !shown
+      ? { ...(last ? { [last.from]: YELLOW, [last.to]: YELLOW } : {}), [hint.from]: HINT, ...(hint.step === 2 ? { [hint.to]: HINT } : {}) }
+      : undefined;
+
   const board = (
     <div className="flex w-full flex-col gap-2">
       {bar(top)}
@@ -249,7 +322,9 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
         orientation={orientation}
         onMove={shown || result ? undefined : onMove}
         side={mode === "computer" ? me : undefined}
-        highlight={pm ? { [pm.from]: PREMOVE, [pm.to]: PREMOVE } : undefined}
+        highlight={highlight}
+        arrows={bestArrow && !shown ? [{ startSquare: bestArrow.from, endSquare: bestArrow.to, color: "rgba(129,182,76,.85)" }] : undefined}
+        badge={coach && !shown ? { square: coach.to, color: LABELS[coach.label].color, sym: LABELS[coach.label].sym } : undefined}
       >
         {result && !closed && (
           <GameOver
@@ -283,7 +358,75 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
             ))}
           </select>
         </label>
-      ) : (
+      ) : null}
+
+      {mode === "computer" && (
+        <div className="mb-4 rounded-md bg-card p-3">
+          <label className="flex items-center justify-between gap-3 font-semibold">
+            <span className="flex items-center gap-2">
+              <GraduationCap className="size-5 text-primary" aria-hidden /> Play Coach
+            </span>
+            <input
+              type="checkbox"
+              className="size-5 accent-[#81b64c]"
+              checked={coachOn}
+              onChange={(e) => {
+                setCoachOn(e.target.checked);
+                clearCoach();
+              }}
+            />
+          </label>
+          {coachOn && (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="rounded-lg bg-white p-3 text-sm text-[#312e2b]" aria-live="polite">
+                {coachBusy ? (
+                  "Thinking about your move…"
+                ) : coach ? (
+                  <>
+                    <p className="mb-1 flex items-center gap-2 font-bold" style={{ color: LABELS[coach.label].color }}>
+                      <span className="grid size-6 place-items-center rounded-full text-xs text-white" style={{ background: LABELS[coach.label].color }}>
+                        {LABELS[coach.label].sym}
+                      </span>
+                      {coach.san} · {LABELS[coach.label].name}
+                    </p>
+                    <p>{coach.coach}</p>
+                  </>
+                ) : (
+                  "Make a move and I'll tell you how good it was."
+                )}
+              </div>
+              {warn ? (
+                <div className="flex flex-wrap gap-2">
+                  <p className="w-full text-sm font-semibold text-[#fa412d]">That move is a blunder. Take it back?</p>
+                  <button className="btn-green py-2! text-base!" onClick={takeBack}>
+                    Take back
+                  </button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setWarn(false);
+                      void botMove(g);
+                    }}
+                  >
+                    Keep it
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => void onHint()} disabled={myTurnIdle ? false : true}>
+                    {hint?.step === 1 ? "Hint: where to?" : "Hint"}
+                  </Button>
+                  <Button variant="secondary" onClick={() => void engineBest().then(setBestArrow)} disabled={!myTurnIdle}>
+                    Show best move
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "computer" ? null : (
         <label className="mb-4 flex items-center gap-3">
           Clock
           <select
