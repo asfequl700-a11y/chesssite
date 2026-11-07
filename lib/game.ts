@@ -22,9 +22,11 @@ export function captured(fen: string, color: "w" | "b") {
   return { taken, lead: Math.max(0, mine - other) };
 }
 
-/** Clock text like chess.com: 5:00, 0:42, and tenths under 20 seconds (0:09.4). */
+/** Clock text like chess.com: 5:00, 0:42, tenths under 20 seconds (0:09.4); daily games: "2 days", "5 h 10 m". */
 export function clockText(ms: number) {
   const t = Math.max(0, ms);
+  if (t >= 86400000) return `${Math.floor(t / 86400000)} day${t >= 172800000 ? "s" : ""}${t % 86400000 >= 3600000 ? ` ${Math.floor((t % 86400000) / 3600000)} h` : ""}`;
+  if (t >= 3600000) return `${Math.floor(t / 3600000)} h ${Math.floor((t % 3600000) / 60000)} m`;
   const m = Math.floor(t / 60000);
   const s = Math.floor(t / 1000) % 60;
   const base = `${m}:${String(s).padStart(2, "0")}`;

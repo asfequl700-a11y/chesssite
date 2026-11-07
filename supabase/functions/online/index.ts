@@ -10,6 +10,7 @@ const cors = {
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 const TIMES = [0, 1, 3, 5, 10];
+const DAYS = [1, 2, 3, 5, 7]; // daily chess: days per move
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -28,16 +29,21 @@ Deno.serve(async (req) => {
     return json({ error: "Bad request." }, 400);
   }
   const now = Date.now();
+  // Fair-play ban (set by hand in the Table Editor): no new games or moves.
+  const { data: me } = await db.from("profiles").select("banned").eq("id", user.id).maybeSingle();
+  if (me?.banned && ["create", "join", "rematch", "move"].includes(String(body.action)))
+    return json({ error: "Your account is under fair-play review, so online play is paused." }, 403);
   const id = typeof body.id === "string" ? body.id : "";
   const name = async (uid: string) => ((await db.from("profiles").select("username").eq("id", uid).maybeSingle()).data?.username as string) ?? "Player";
   const load = async () => (await db.from("online_games").select("*").eq("id", id).maybeSingle()).data as (GameRow & Record<string, unknown>) | null;
 
   switch (body.action) {
     case "create": {
-      const minutes = Number(body.minutes);
-      if (!TIMES.includes(minutes)) return json({ error: "Pick 1, 3, 5 or 10 minutes, or no clock." }, 400);
+      const minutes = Number(body.minutes ?? 0);
+      const days = Number(body.days ?? 0);
+      if (days ? !DAYS.includes(days) : !TIMES.includes(minutes)) return json({ error: "Pick 1, 3, 5 or 10 minutes, no clock, or 1-7 days per move." }, 400);
       const color = body.color === "random" ? (Math.random() < 0.5 ? "white" : "black") : body.color === "black" ? "black" : "white";
-      const ms = minutes * 60000;
+      const ms = days ? 0 : minutes * 60000;
       // Optional direct challenge: only this player may join (they get a notification).
       const to = typeof body.to === "string" ? body.to : null;
       if (to === user.id) return json({ error: "You can't challenge yourself." }, 400);
@@ -45,7 +51,7 @@ Deno.serve(async (req) => {
       if (to && invitedName === "Player") return json({ error: "Player not found." }, 404);
       const { data, error } = await db
         .from("online_games")
-        .insert({ created_by: user.id, [color]: user.id, [`${color}_name`]: await name(user.id), time_ms: ms, white_ms: ms, black_ms: ms, invited: to, invited_name: invitedName })
+        .insert({ created_by: user.id, [color]: user.id, [`${color}_name`]: await name(user.id), time_ms: ms, white_ms: ms, black_ms: ms, daily_days: days, invited: to, invited_name: invitedName })
         .select("id")
         .single();
       if (error) return json({ error: error.message }, 500);
@@ -56,7 +62,7 @@ Deno.serve(async (req) => {
       // What someone opening an invite link may see before joining.
       const g = await load();
       if (!g) return json({ error: "Game not found. Ask your friend for a new link." }, 404);
-      return json({ status: g.status, time_ms: g.time_ms, host: g.white_name || g.black_name, invited_name: g.invited_name, for_me: !g.invited || g.invited === user.id, mine: [g.white, g.black, g.created_by].includes(user.id), now });
+      return json({ status: g.status, time_ms: g.time_ms, daily_days: g.daily_days, host: g.white_name || g.black_name, invited_name: g.invited_name, for_me: !g.invited || g.invited === user.id, mine: [g.white, g.black, g.created_by].includes(user.id), now });
     }
 
     case "join": {
@@ -68,7 +74,11 @@ Deno.serve(async (req) => {
       const slot = g.white ? "black" : "white";
       const { data, error } = await db
         .from("online_games")
-        .update({ [slot]: user.id, [`${slot}_name`]: await name(user.id), status: "active", updated_at: new Date(now).toISOString() })
+        .update({
+          [slot]: user.id, [`${slot}_name`]: await name(user.id), status: "active", updated_at: new Date(now).toISOString(),
+          // Daily games: White's first move is on the clock too (from the moment the game starts).
+          ...(g.daily_days ? { turn_started_at: new Date(now).toISOString() } : {}),
+        })
         .eq("id", id)
         .eq("status", "waiting") // two people joining at once: only the first wins
         .select("id");
@@ -96,7 +106,8 @@ Deno.serve(async (req) => {
         .from("online_games")
         .insert({
           created_by: user.id, white: g.black, black: g.white, white_name: g.black_name, black_name: g.white_name,
-          status: "active", time_ms: g.time_ms, white_ms: g.time_ms, black_ms: g.time_ms,
+          status: "active", time_ms: g.time_ms, white_ms: g.time_ms, black_ms: g.time_ms, daily_days: g.daily_days,
+          ...(g.daily_days ? { turn_started_at: new Date(now).toISOString() } : {}),
         })
         .select("id")
         .single();
@@ -108,6 +119,25 @@ Deno.serve(async (req) => {
         return json({ id: (await load())?.rematch_id, now });
       }
       return json({ id: fresh.id, now });
+    }
+
+    case "fairplay": {
+      // Sent by the OPPONENT's browser after reviewing the finished game: the other player's accuracy.
+      const g = await load();
+      const accuracy = Number(body.accuracy);
+      if (!g || g.status !== "over" || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100) return json({ error: "Bad fair-play report." }, 400);
+      const side = g.white === user.id ? "w" : g.black === user.id ? "b" : null;
+      if (!side) return json({ error: "Not your game." }, 403);
+      const player = side === "w" ? g.black : g.white;
+      const start = side === "w" ? 1 : 0; // the other player's moves: odd indices for Black, even for White
+      const times = ((g.move_times as number[]) ?? []).filter((_, i) => i % 2 === start && i > 1);
+      const moves = (g.moves as string[]).filter((_, i) => i % 2 === start).length;
+      if (player && moves >= 5)
+        await db.from("fair_play").upsert(
+          { game_id: id, player, accuracy, moves, avg_move_ms: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null },
+          { onConflict: "game_id,player", ignoreDuplicates: true },
+        );
+      return json({ ok: true, now });
     }
 
     default: {
@@ -134,7 +164,7 @@ async function saveForBoth(db: ReturnType<typeof createClient>, row: Record<stri
   g.setHeader("White", String(row.white_name));
   g.setHeader("Black", String(row.black_name));
   const pgn = g.pgn();
-  const tc = row.time_ms ? `${Number(row.time_ms) / 60000} min` : "none";
+  const tc = row.daily_days ? `${row.daily_days} days/move` : row.time_ms ? `${Number(row.time_ms) / 60000} min` : "none";
   const ids: Record<string, number> = {};
   for (const side of ["w", "b"] as const) {
     const uid = side === "w" ? row.white : row.black;

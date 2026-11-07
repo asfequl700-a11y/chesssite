@@ -19,6 +19,9 @@ export type Profile = {
   active_days: string[]; // "YYYY-MM-DD", local dates
   skill: number | null; // self-rated 1-100 on the welcome screen
   onboarded: boolean;
+  avatar_url: string | null;
+  bio: string;
+  banned: boolean;
 };
 
 type Account = { user: User | null; profile: Profile | null; ready: boolean };

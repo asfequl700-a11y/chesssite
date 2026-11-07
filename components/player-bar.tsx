@@ -49,7 +49,7 @@ export function PlayerBar({
       {clock && (
         // chess.com clock: 134×40, radius 3px, white/dark face, dimmed when not running, red when low.
         <div
-          className={`flex h-10 w-[134px] shrink-0 items-center justify-end rounded-[3px] px-3 text-2xl font-semibold tabular-nums transition-opacity ${
+          className={`flex h-10 w-[134px] shrink-0 items-center justify-end rounded-[3px] px-3 font-semibold tabular-nums transition-opacity ${clockText(clock.ms).length > 7 ? "text-base" : "text-2xl"} ${
             clock.running && low ? "bg-[#ad1f24] text-white" : color === "w" ? "bg-white text-[#262421]" : "bg-[#262421] text-white"
           } ${clock.running ? "" : "opacity-50"}`}
           role="timer"

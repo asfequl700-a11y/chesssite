@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Swords, UserPlus, Users, X } from "lucide-react";
+import { Bell, Mail, Swords, UserPlus, Users, X } from "lucide-react";
 import { online } from "@/lib/online";
-import { acceptFriend, removeFriend, useChallenges, useFriends, usePresence, type Challenge } from "@/lib/social";
+import { acceptFriend, removeFriend, useChallenges, useConversations, useFriends, usePresence, type Challenge } from "@/lib/social";
 
-const timeText = (ms: number) => (ms ? `${ms / 60000} min` : "no clock");
+const timeText = (c: Challenge) => (c.daily_days ? `daily, ${c.daily_days} days/move` : c.time_ms ? `${c.time_ms / 60000} min` : "no clock");
 const from = (c: Challenge) => (c.white === c.created_by ? c.white_name : c.black_name);
 
 /** Accept (join + open the game) or decline a challenge. */
@@ -49,7 +49,7 @@ export function ChallengeToast() {
       </button>
       <p className="mb-3 pr-4">
         <Swords className="mr-1 inline size-5 text-primary" aria-hidden />
-        <b>{from(toast)}</b> challenges you to a game ({timeText(toast.time_ms)})
+        <b>{from(toast)}</b> challenges you to a game ({timeText(toast)})
       </p>
       <div className="flex gap-2">
         <button className="btn-green flex-1 py-2! text-base!" onClick={() => void accept(toast)}>
@@ -76,6 +76,7 @@ export function SocialIcons({ close }: { close: () => void }) {
   usePresence(); // marks you online while the site is open
   const [open, setOpen] = useState(false);
   const count = challenges.length + requests.length;
+  const unread = (useConversations() ?? []).reduce((n, c) => n + Number(c.unread), 0);
   const { accept, decline } = useAnswer(() => {
     setOpen(false);
     close();
@@ -86,6 +87,10 @@ export function SocialIcons({ close }: { close: () => void }) {
     <div className="relative flex gap-1 px-1">
       <Link href="/friends" onClick={close} className={icon} aria-label="Friends" title="Friends">
         <Users className="size-5" />
+      </Link>
+      <Link href="/messages" onClick={close} className={icon} aria-label={`Messages${unread ? `: ${unread} unread` : ""}`} title="Messages">
+        <Mail className="size-5" />
+        {unread > 0 && <span className="absolute -top-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-[#fa412d] text-[10px] font-bold text-white">{unread}</span>}
       </Link>
       <button className={icon} onClick={() => setOpen(!open)} aria-label={`Notifications${count ? `: ${count} new` : ""}`} aria-expanded={open} title="Notifications">
         <Bell className="size-5" />
@@ -99,7 +104,7 @@ export function SocialIcons({ close }: { close: () => void }) {
             <div key={c.id} className="flex flex-col gap-2 rounded p-2 hover:bg-panel">
               <p className="text-sm">
                 <Swords className="mr-1 inline size-4 text-primary" aria-hidden />
-                <b>{from(c)}</b> challenges you ({timeText(c.time_ms)})
+                <b>{from(c)}</b> challenges you ({timeText(c)})
               </p>
               <div className="flex gap-2">
                 <button className="btn-green flex-1 py-1.5! text-sm!" onClick={() => void accept(c)}>

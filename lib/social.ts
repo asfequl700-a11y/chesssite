@@ -3,10 +3,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { supabase, useAccount } from "@/lib/supabase";
 
-export type Friend = { request_id: number; id: string; username: string; dir: "friend" | "incoming" | "outgoing"; since: string };
-export type Challenge = { id: string; created_by: string; white: string | null; white_name: string; black_name: string; time_ms: number; created_at: string };
+export type Friend = { request_id: number; id: string; username: string; avatar_url: string | null; dir: "friend" | "incoming" | "outgoing"; since: string };
+export type Challenge = { id: string; created_by: string; white: string | null; white_name: string; black_name: string; time_ms: number; daily_days: number; created_at: string };
 
-export const findPlayers = async (q: string) => ((await supabase.rpc("find_players", { q })).data ?? []) as { id: string; username: string }[];
+export const findPlayers = async (q: string) => ((await supabase.rpc("find_players", { q })).data ?? []) as { id: string; username: string; avatar_url: string | null }[];
 export const addFriend = async (id: string) => {
   const { data, error } = await supabase.rpc("add_friend", { friend: id });
   if (error) throw new Error(error.message);
@@ -16,7 +16,7 @@ export const acceptFriend = (request: number) => supabase.rpc("accept_friend", {
 export const removeFriend = (request: number) => supabase.rpc("remove_friend", { request });
 
 /** Runs `load` now and again whenever a matching row changes (live), for the signed-in user. */
-function useLive<T>(name: string, load: (me: string) => Promise<T>, tables: { table: string; filter: (me: string) => string }[]) {
+export function useLive<T>(name: string, load: (me: string) => Promise<T>, tables: { table: string; filter: (me: string) => string }[]) {
   const { user } = useAccount();
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
@@ -50,7 +50,7 @@ export function useChallenges() {
     async (me) => {
       const { data } = await supabase
         .from("online_games")
-        .select("id, created_by, white, white_name, black_name, time_ms, created_at")
+        .select("id, created_by, white, white_name, black_name, time_ms, daily_days, created_at")
         .eq("invited", me)
         .eq("status", "waiting")
         .order("created_at", { ascending: false });
@@ -90,5 +90,37 @@ export function usePresence() {
     },
     () => online,
     () => online,
+  );
+}
+
+export type Conversation = { id: string; username: string; avatar_url: string | null; last_body: string; last_at: string; last_from_me: boolean; unread: number };
+
+/** Your conversations (newest first) with unread counts, kept up to date live. */
+export function useConversations() {
+  return useLive("conversations", async () => ((await supabase.rpc("conversations")).data ?? []) as Conversation[], [
+    { table: "messages", filter: (me) => `to_user=eq.${me}` },
+    { table: "messages", filter: (me) => `from_user=eq.${me}` },
+  ]);
+}
+
+export type OngoingGame = { id: string; white: string | null; black: string | null; white_name: string; black_name: string; moves: string[]; daily_days: number; time_ms: number; turn_started_at: string | null; status: string };
+
+/** Your online games still being played (live and daily), kept up to date live. */
+export function useOngoingGames() {
+  return useLive(
+    "ongoing",
+    async () => {
+      const { data } = await supabase
+        .from("online_games")
+        .select("id, white, black, white_name, black_name, moves, daily_days, time_ms, turn_started_at, status")
+        .eq("status", "active")
+        .order("updated_at", { ascending: false })
+        .limit(20);
+      return (data ?? []) as OngoingGame[];
+    },
+    [
+      { table: "online_games", filter: (me) => `white=eq.${me}` },
+      { table: "online_games", filter: (me) => `black=eq.${me}` },
+    ],
   );
 }

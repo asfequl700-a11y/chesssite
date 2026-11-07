@@ -21,6 +21,9 @@ assert.equal(clockText(300000), "5:00");
 assert.equal(clockText(42000), "0:42");
 assert.equal(clockText(9400), "0:09.4");
 assert.equal(clockText(-5), "0:00.0");
+assert.equal(clockText(2 * 86400000 + 5 * 3600000), "2 days 5 h");
+assert.equal(clockText(86400000), "1 day");
+assert.equal(clockText(5 * 3600000 + 10 * 60000), "5 h 10 m");
 
 const mate = new Chess();
 for (const m of ["f3", "e5", "g4", "Qh4#"]) mate.move(m);
@@ -124,4 +127,12 @@ assert.equal(err(applyAction(orow({ status: "over" }), { type: "move", uci: "e2e
 assert.deepEqual([levelRating(1), levelRating(100), levelRating(50)], [400, 2000, 1192]);
 assert.deepEqual([1, 15, 16, 60, 61, 100].map((l) => levelInfo(l).label), ["New to chess", "New to chess", "Beginner", "Intermediate", "Advanced", "Expert"]);
 assert.deepEqual([botNear(400).id, botNear(1192).id, botNear(2000).id], ["rosa", "mei", "zara"]);
+// Daily chess: 1 day per move, resets after each move; time-out after the deadline; move times recorded.
+const daily = (o: Partial<GameRow> = {}) => orow({ time_ms: 0, daily_days: 1, turn_started_at: new Date(T0).toISOString(), ...o });
+assert.equal(timeLeft(daily(), "w", T0 + 3600000), 86400000 - 3600000);
+const d1 = ok(applyAction(daily(), { type: "move", uci: "e2e4" }, W, T0 + 3600000));
+assert.deepEqual(d1.move_times, [3600000]);
+assert.equal(timeLeft(daily({ ...d1 } as Partial<GameRow>), "b", T0 + 3600000), 86400000); // Black gets a full day
+assert.equal(ok(applyAction(daily(), { type: "flag" }, Bk, T0 + 86400001)).reason, "on time");
+assert.equal(err(applyAction(daily(), { type: "flag" }, Bk, T0 + 86399000)), "No one has run out of time.");
 console.log("game checks passed");

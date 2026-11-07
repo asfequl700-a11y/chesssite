@@ -63,15 +63,20 @@ export async function saveGame(
   await fillAccuracy(data.id, g.pgn(), info.my_color);
 }
 
-/** Work out the player's accuracy with a quick engine review and store it on their saved game. */
+/**
+ * Work out accuracy with a quick engine review and store the player's on their saved game.
+ * Returns both sides' accuracy (online games send the opponent's to the fair-play check).
+ */
 export async function fillAccuracy(id: number, pgn: string, color: "w" | "b") {
   const engine = new Engine();
   try {
     const review = await runReview(pgn, engine, () => {}, 10);
-    const accuracy = Math.round(sideAccuracy(review.moves, color) * 10) / 10;
-    await supabase.from("games").update({ accuracy }).eq("id", id);
+    const acc = (c: "w" | "b") => Math.round(sideAccuracy(review.moves, c) * 10) / 10;
+    await supabase.from("games").update({ accuracy: acc(color) }).eq("id", id);
+    return { w: acc("w"), b: acc("b") };
   } catch (e) {
     console.warn("Accuracy not saved:", e);
+    return null;
   } finally {
     engine.quit();
   }

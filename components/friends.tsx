@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Swords, UserPlus, X } from "lucide-react";
+import { Avatar } from "@/components/avatar";
 import { PlainPage } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
 import { online } from "@/lib/online";
@@ -11,31 +12,26 @@ import { acceptFriend, addFriend, findPlayers, removeFriend, useFriends, usePres
 import { useAccount } from "@/lib/supabase";
 
 const TIMES = [1, 3, 5, 10, 0];
+const DAYS = [1, 3, 7]; // daily chess
 
 /** Green dot when the player has the site open (Realtime Presence). */
 export function OnlineDot({ on }: { on: boolean }) {
   return <span className={`inline-block size-2.5 shrink-0 rounded-full ${on ? "bg-primary" : "bg-white/20"}`} title={on ? "Online" : "Offline"} aria-label={on ? "online" : "offline"} />;
 }
 
-function Avatar({ name }: { name: string }) {
-  return (
-    <span className="grid size-10 shrink-0 place-items-center rounded-[3px] bg-card text-lg font-bold" aria-hidden>
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
 
 /** "Challenge" button: pick a time and colour, then the game waits for them to accept. */
 export function ChallengeButton({ id, username }: { id: string; username: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [minutes, setMinutes] = useState(5);
+  const [days, setDays] = useState(0);
   const [color, setColor] = useState<"white" | "random" | "black">("random");
   const [error, setError] = useState("");
   const send = async () => {
     setError("");
     try {
-      const { id: game } = await online<{ id: string }>("create", { minutes, color, to: id });
+      const { id: game } = await online<{ id: string }>("create", days ? { days, color, to: id } : { minutes, color, to: id });
       router.push(`/play/online/${game}`);
     } catch (e) {
       setError((e as Error).message);
@@ -51,8 +47,23 @@ export function ChallengeButton({ id, username }: { id: string; username: string
           <p className="mb-2 font-semibold">Challenge {username}</p>
           <div className="mb-2 grid grid-cols-5 gap-1">
             {TIMES.map((t) => (
-              <button key={t} onClick={() => setMinutes(t)} aria-pressed={minutes === t} className={`rounded py-1.5 text-xs font-bold ${minutes === t ? "bg-accent ring-2 ring-primary" : "bg-panel"}`}>
+              <button
+                key={t}
+                onClick={() => {
+                  setMinutes(t);
+                  setDays(0);
+                }}
+                aria-pressed={!days && minutes === t}
+                className={`rounded py-1.5 text-xs font-bold ${!days && minutes === t ? "bg-accent ring-2 ring-primary" : "bg-panel"}`}
+              >
                 {t ? `${t}m` : "∞"}
+              </button>
+            ))}
+          </div>
+          <div className="mb-2 grid grid-cols-3 gap-1" aria-label="Daily chess">
+            {DAYS.map((d) => (
+              <button key={d} onClick={() => setDays(d)} aria-pressed={days === d} className={`rounded py-1.5 text-xs font-bold ${days === d ? "bg-accent ring-2 ring-primary" : "bg-panel"}`}>
+                {d} day{d > 1 ? "s" : ""}/move
               </button>
             ))}
           </div>
@@ -73,14 +84,14 @@ export function ChallengeButton({ id, username }: { id: string; username: string
   );
 }
 
-function Row({ f, on, children }: { f: { username: string }; on?: boolean; children: React.ReactNode }) {
+function Row({ f, on, children }: { f: { username: string; avatar_url?: string | null }; on?: boolean; children: React.ReactNode }) {
   return (
     <li className="flex items-center gap-3 border-t border-white/5 p-3 first:border-t-0">
-      <Avatar name={f.username} />
-      <span className="flex min-w-0 flex-1 items-center gap-2 font-semibold">
+      <Avatar url={f.avatar_url} name={f.username} />
+      <Link href={`/member/${f.username}`} className="flex min-w-0 flex-1 items-center gap-2 font-semibold hover:underline">
         {on !== undefined && <OnlineDot on={on} />}
         <span className="truncate">{f.username}</span>
-      </span>
+      </Link>
       {children}
     </li>
   );

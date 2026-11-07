@@ -9,6 +9,8 @@ export type GameRow = {
   white: string | null;
   black: string | null;
   time_ms: number;
+  daily_days?: number; // daily chess: days per move (the clock resets after every move), 0 = live game
+  move_times?: number[]; // ms each move took (recorded by the server, used for fair play)
   white_ms: number;
   black_ms: number;
   turn_started_at: string | null;
@@ -37,8 +39,18 @@ export function replay(moves: string[]) {
   return g;
 }
 
+const DAY = 86400000;
+/** Does this game have a time limit (live clock or daily deadline)? */
+export const isTimed = (row: GameRow) => row.time_ms > 0 || (row.daily_days ?? 0) > 0;
+
 /** Time left for a side right now (the side to move loses time since its clock started). */
 export function timeLeft(row: GameRow, side: Side, now: number) {
+  if (row.daily_days) {
+    // Daily: every move gets the full allowance again.
+    const full = row.daily_days * DAY;
+    const turn: Side = row.moves.length % 2 === 0 ? "w" : "b";
+    return row.status === "active" && row.turn_started_at && turn === side ? full - (now - Date.parse(row.turn_started_at)) : full;
+  }
   const base = row[msKey(side)];
   if (!row.time_ms || row.status !== "active" || !row.turn_started_at) return base;
   const turn: Side = row.moves.length % 2 === 0 ? "w" : "b";
@@ -79,7 +91,7 @@ export function applyAction(row: GameRow, action: Action, user: string, now: num
   switch (action.type) {
     case "move": {
       if (turn !== me) return { error: "It's not your turn." };
-      if (row.time_ms && timeLeft(row, me, now) <= 0) return timeout(row, me, now);
+      if (isTimed(row) && timeLeft(row, me, now) <= 0) return timeout(row, me, now);
       if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(action.uci)) return { error: "Bad move format." };
       const g = replay(row.moves);
       try {
@@ -90,6 +102,7 @@ export function applyAction(row: GameRow, action: Action, user: string, now: num
       const patch: Outcome & { patch: Record<string, unknown> } = {
         patch: {
           moves: [...row.moves, action.uci],
+          move_times: [...(row.move_times ?? []), row.turn_started_at ? Math.max(0, now - Date.parse(row.turn_started_at)) : 0],
           fen: g.fen(),
           // The clock starts after White's first move, like over the board.
           [msKey(me)]: row.time_ms && row.turn_started_at ? timeLeft(row, me, now) : row[msKey(me)],
@@ -114,7 +127,7 @@ export function applyAction(row: GameRow, action: Action, user: string, now: num
     }
     case "flag": {
       // Either player can ask the server to check the clock of the side to move.
-      if (!row.time_ms || timeLeft(row, turn, now) > 0) return { error: "No one has run out of time." };
+      if (!isTimed(row) || timeLeft(row, turn, now) > 0) return { error: "No one has run out of time." };
       return timeout(row, turn, now);
     }
     case "resign":

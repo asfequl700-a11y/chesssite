@@ -14,9 +14,10 @@ import { markActive } from "@/lib/activity";
 import { fillAccuracy } from "@/lib/games";
 import { online, serverNow } from "@/lib/online";
 import { ChallengeButton, OnlineDot } from "@/components/friends";
+import { ReportButton } from "@/components/report-dialog";
 import { usePresence, useFriends } from "@/lib/social";
 import { supabase, useAccount } from "@/lib/supabase";
-import { replay, timeLeft, type GameRow, type Side } from "@/supabase/functions/_shared/online-rules";
+import { isTimed, replay, timeLeft, type GameRow, type Side } from "@/supabase/functions/_shared/online-rules";
 
 type Row = GameRow & {
   id: string;
@@ -33,6 +34,7 @@ type Row = GameRow & {
 };
 
 const TIMES = [1, 3, 5, 10, 0];
+const DAYS = [1, 2, 3, 5, 7]; // daily chess: days per move
 
 /** Sends a guest to log in and brings them back here afterwards. */
 function LoginToPlay({ what }: { what: string }) {
@@ -55,6 +57,7 @@ export function OnlineLobby() {
   const router = useRouter();
   const { user, ready } = useAccount();
   const [minutes, setMinutes] = useState(5);
+  const [days, setDays] = useState(0); // >0 = daily chess
   const [color, setColor] = useState<"white" | "random" | "black">("random");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -63,7 +66,7 @@ export function OnlineLobby() {
     setBusy(true);
     setError("");
     try {
-      const { id } = await online<{ id: string }>("create", { minutes, color });
+      const { id } = await online<{ id: string }>("create", days ? { days, color } : { minutes, color });
       router.push(`/play/online/${id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -79,20 +82,33 @@ export function OnlineLobby() {
         <div className="flex flex-col gap-4">
           <p className="text-muted-foreground">Create a game, send the link to a friend, and play live from two devices.</p>
           <div>
-            <p className="mb-2 text-sm font-semibold">Time per player</p>
-            <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Time per player">
-              {TIMES.map((t) => (
-                <button
-                  key={t}
-                  role="radio"
-                  aria-checked={minutes === t}
-                  onClick={() => setMinutes(t)}
-                  className={`rounded-md py-3 text-sm font-bold ${minutes === t ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-accent"}`}
-                >
-                  {t ? `${t} min` : "No clock"}
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-md bg-card p-1" role="radiogroup" aria-label="Game type">
+              {[
+                { d: 0, label: "Live" },
+                { d: 3, label: "Daily (days per move)" },
+              ].map(({ d, label }) => (
+                <button key={label} role="radio" aria-checked={!days === !d} onClick={() => setDays(d)} className={`rounded py-2 text-sm font-semibold ${!days === !d ? "bg-accent text-white" : "text-muted-foreground hover:text-white"}`}>
+                  {label}
                 </button>
               ))}
             </div>
+            <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={days ? "Days per move" : "Time per player"}>
+              {(days ? DAYS : TIMES).map((t) => {
+                const on = days ? days === t : minutes === t;
+                return (
+                  <button
+                    key={t}
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => (days ? setDays(t) : setMinutes(t))}
+                    className={`rounded-md py-3 text-sm font-bold ${on ? "bg-accent ring-2 ring-primary" : "bg-card hover:bg-accent"}`}
+                  >
+                    {days ? `${t} day${t > 1 ? "s" : ""}` : t ? `${t} min` : "No clock"}
+                  </button>
+                );
+              })}
+            </div>
+            {days > 0 && <p className="mt-2 text-xs text-muted-foreground">Each player has {days} day{days > 1 ? "s" : ""} per move. Play a move whenever you like; the game waits.</p>}
           </div>
           <div>
             <p className="mb-2 text-sm font-semibold">I play</p>
@@ -167,7 +183,7 @@ export function OnlineGame({ id }: { id: string }) {
   const router = useRouter();
   const { user, ready } = useAccount();
   const [row, setRow] = useState<Row | null>(null);
-  const [peek, setPeek] = useState<{ status: string; time_ms: number; host: string } | null>(null);
+  const [peek, setPeek] = useState<{ status: string; time_ms: number; daily_days?: number; host: string } | null>(null);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<string | null>(null);
@@ -217,7 +233,9 @@ export function OnlineGame({ id }: { id: string }) {
   const me: Side | null = !row || !user ? null : row.white === user.id ? "w" : row.black === user.id ? "b" : null;
   const turn: Side = moves.length % 2 === 0 ? "w" : "b";
   const active = row?.status === "active";
-  const timed = !!row?.time_ms;
+  const timed = !!row && isTimed(row);
+  const daily = !!row?.daily_days;
+  const speed = !row ? "" : daily ? `Daily · ${row.daily_days} day${row.daily_days! > 1 ? "s" : ""} per move` : row.time_ms ? `Live · ${row.time_ms / 60000} min` : "Live · no clock";
 
   // Clock ticks; when the side to move hits zero, ask the server to confirm the time-out.
   useEffect(() => {
@@ -239,8 +257,11 @@ export function OnlineGame({ id }: { id: string }) {
     if (!myId) return;
     finished.current = true;
     markActive();
-    void fillAccuracy(myId, replay(row.moves).pgn(), me);
-  }, [row, me]);
+    // My browser also measures my OPPONENT's accuracy for the fair-play check (they can't fake my browser).
+    void fillAccuracy(myId, replay(row.moves).pgn(), me).then((acc) => {
+      if (acc && row.result !== null) online("fairplay", { id, accuracy: acc[me === "w" ? "b" : "w"] }).catch(() => {});
+    });
+  }, [row, me, id]);
 
   const act = async (action: string, extra: Record<string, unknown> = {}) => {
     setNote("");
@@ -303,7 +324,7 @@ export function OnlineGame({ id }: { id: string }) {
         {peek.status === "waiting" ? (
           <div className="flex flex-col gap-3">
             <p className="text-lg">
-              <b>{peek.host}</b> invited you to a game ({peek.time_ms ? `${peek.time_ms / 60000} min` : "no clock"}).
+              <b>{peek.host}</b> invited you to a game ({peek.daily_days ? `daily, ${peek.daily_days} days per move` : peek.time_ms ? `${peek.time_ms / 60000} min` : "no clock"}).
             </p>
             {note && <p className="text-destructive">{note}</p>}
             <button
@@ -333,7 +354,7 @@ export function OnlineGame({ id }: { id: string }) {
       <GameScreen title="Challenge">
         <div className="flex flex-col gap-3">
           <p className="text-lg">
-            <b>{row.white_name || row.black_name}</b> challenges you ({row.time_ms ? `${row.time_ms / 60000} min` : "no clock"}, you play{" "}
+            <b>{row.white_name || row.black_name}</b> challenges you ({daily ? `daily, ${row.daily_days} days per move` : row.time_ms ? `${row.time_ms / 60000} min` : "no clock"}, you play{" "}
             {row.white ? "Black" : "White"}).
           </p>
           {note && <p className="text-destructive">{note}</p>}
@@ -356,7 +377,7 @@ export function OnlineGame({ id }: { id: string }) {
       name={`${nameOf(s)}${s === me ? " (you)" : ""}`}
       color={s}
       fen={g.fen()}
-      clock={timed ? { ms: Math.max(0, timeLeft(row, s, serverNow())), running: active && turn === s && moves.length > 0 } : undefined}
+      clock={timed ? { ms: Math.max(0, timeLeft(row, s, serverNow())), running: active && turn === s && (daily || moves.length > 0) } : undefined}
     />
   );
   const result = row.status === "over" && row.reason !== "cancelled" && row.reason !== "declined" ? { winner: row.result === "draw" ? null : row.result, reason: row.reason } : null;
@@ -395,7 +416,7 @@ export function OnlineGame({ id }: { id: string }) {
   return (
     <GameScreen title="Online game" board={board}>
       <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-        <Wifi className="size-4 text-primary" aria-hidden /> Live · {timed ? `${row.time_ms / 60000} min` : "no clock"}
+        <Wifi className="size-4 text-primary" aria-hidden /> {speed}
       </p>
 
       {row.status === "waiting" && row.invited && (
@@ -481,6 +502,18 @@ export function OnlineGame({ id }: { id: string }) {
           <Button variant="secondary" onClick={() => setFlip(!flip)}>
             Flip board
           </Button>
+        </div>
+      )}
+
+      {me && (row.white && row.black) && (
+        <div className="mb-3 flex items-center justify-between gap-2 text-sm">
+          <span className="text-muted-foreground">
+            Opponent:{" "}
+            <Link href={`/member/${nameOf(me === "w" ? "b" : "w")}`} className="font-semibold text-white hover:underline">
+              {nameOf(me === "w" ? "b" : "w")}
+            </Link>
+          </span>
+          <ReportButton userId={(me === "w" ? row.black : row.white)!} username={nameOf(me === "w" ? "b" : "w")} gameId={id} />
         </div>
       )}
 

@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
 import { BarChart3, Bot, Flame, GraduationCap, Library, Puzzle, Swords, Timer, Users, Wifi } from "lucide-react";
 import { Board } from "@/components/board";
+import { Avatar } from "@/components/avatar";
 import { BotAvatar } from "@/components/bot-avatar";
 import { ChallengeButton, OnlineDot } from "@/components/friends";
 import { RESULT } from "@/components/my-games";
-import { usePresence, useFriends } from "@/lib/social";
+import { clockText } from "@/lib/game";
+import { useOngoingGames, usePresence, useFriends } from "@/lib/social";
 import { lastWeek, streak } from "@/lib/activity";
 import { BOTS } from "@/lib/bots";
 import { loadCourses, loadProgress, type Course } from "@/lib/courses";
@@ -91,6 +93,48 @@ function PictureCard({ fen, icon, title, sub, cta, onClick, orientation = "white
           {cta}
         </button>
       </div>
+    </section>
+  );
+}
+
+/** Online and daily games in progress, "Your move" first (like chess.com's daily games list). */
+function Ongoing({ me }: { me: string }) {
+  const router = useRouter();
+  const games = useOngoingGames();
+  const [now, setNow] = useState(0); // refreshed every minute for the "time left" text
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    tick();
+    const t = setInterval(tick, 60000);
+    return () => clearInterval(t);
+  }, []);
+  if (!games?.length) return null;
+  const rows = games
+    .map((g) => {
+      const side = g.white === me ? "w" : "b";
+      const myTurn = (g.moves.length % 2 === 0 ? "w" : "b") === side;
+      const left = g.daily_days && g.turn_started_at && now ? g.daily_days * 86400000 - (now - Date.parse(g.turn_started_at)) : null;
+      return { g, myTurn, opp: side === "w" ? g.black_name : g.white_name, left };
+    })
+    .sort((a, b) => Number(b.myTurn) - Number(a.myTurn));
+  return (
+    <section className={`${card} overflow-hidden`}>
+      <h2 className="p-4 font-sans text-xl font-bold">
+        Your games <span className="text-base text-muted-foreground">{rows.filter((r) => r.myTurn).length} waiting for you</span>
+      </h2>
+      <ul>
+        {rows.map(({ g, myTurn, opp, left }) => (
+          <li key={g.id}>
+            <button onClick={() => router.push(`/play/online/${g.id}`)} className="flex w-full items-center gap-3 border-t border-white/5 px-4 py-3 text-left hover:bg-accent">
+              <span className={`rounded px-2 py-0.5 text-xs font-bold ${myTurn ? "bg-primary text-white" : "bg-card text-muted-foreground"}`}>{myTurn ? "Your move" : "Their move"}</span>
+              <span className="flex-1 truncate">
+                vs <b>{opp}</b> <span className="text-sm text-muted-foreground">· move {Math.floor(g.moves.length / 2) + 1}</span>
+              </span>
+              <span className="text-sm text-muted-foreground">{g.daily_days ? (left !== null ? `${clockText(left)} left` : "Daily") : "Live"}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -321,12 +365,10 @@ export function Dashboard() {
   return (
     <div className="mx-auto flex max-w-[1320px] flex-col gap-4 p-4 lg:p-6">
       <header className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-[3px] bg-primary text-lg font-bold text-white" aria-hidden>
-            {profile.username.charAt(0).toUpperCase()}
-          </span>
+        <Link href={`/member/${profile.username}`} className="flex items-center gap-3 hover:underline">
+          <Avatar url={profile.avatar_url} name={profile.username} size={40} />
           <h1 className="font-sans text-xl font-bold">{profile.username}</h1>
-        </div>
+        </Link>
         <span className="flex items-center gap-2 text-xl font-bold">
           <Flame className={`size-7 ${n ? "text-[#ff9b2f]" : "text-muted-foreground"}`} aria-hidden /> {n} Day Streak
         </span>
@@ -372,7 +414,10 @@ export function Dashboard() {
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex flex-col gap-4">{games ? <History games={games.slice(0, 5)} review={review} /> : <div className={`${card} h-48 animate-pulse`} />}</div>
+        <div className="flex flex-col gap-4">
+          <Ongoing me={profile.id} />
+          {games ? <History games={games.slice(0, 5)} review={review} /> : <div className={`${card} h-48 animate-pulse`} />}
+        </div>
         <div className="flex flex-col gap-4">
           <DailyPuzzle puzzle={daily} open={openPuzzle} />
           <StreakCard profile={profile} />

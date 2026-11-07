@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
 import { BarChart3, BookOpen, GraduationCap, History, Library, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/avatar";
 import { ChallengeToast, SocialIcons } from "@/components/notifications";
 import { supabase, useAccount } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -126,12 +127,10 @@ function Account({ close }: { close: () => void }) {
   const item = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent hover:text-white";
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2 px-2 pb-1">
-        <span className="grid size-8 shrink-0 place-items-center rounded-[3px] bg-primary font-bold text-white" aria-hidden>
-          {name.charAt(0).toUpperCase()}
-        </span>
+      <Link href={`/member/${profile?.username ?? ""}`} onClick={close} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-sidebar-accent" title="Your profile">
+        <Avatar url={profile?.avatar_url} name={name} size={32} />
         <span className="truncate text-sm font-semibold text-white">{name}</span>
-      </div>
+      </Link>
       <SocialIcons close={close} />
       <Link href="/games" onClick={close} className={item}>
         <History className="size-4 text-primary" aria-hidden /> My games
