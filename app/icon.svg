@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- ChessSite icon: our own Geo knight (lib/geo-pieces.tsx) on the site's green, like a board square. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#81b64c"/>
+      <stop offset="1" stop-color="#5d9948"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <g transform="translate(5 2) scale(1.18)" fill="#ffffff" stroke="#2b2a28" stroke-width="2" stroke-linejoin="round">
+    <path d="M14 38 H33 L32.4 25.5 C32.4 16.5 27.5 11.5 19.6 11 L18 14.3 L13 19.3 L11.3 25 L15.8 26.6 L19.6 23.3 L18 30 Z"/>
+    <rect x="11.5" y="38" width="24" height="5" rx="1.6"/>
+  </g>
+  <circle cx="28.5" cy="23" r="1.9" fill="#2b2a28"/>
+</svg>
