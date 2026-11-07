@@ -7,13 +7,19 @@ export type Friend = { request_id: number; id: string; username: string; avatar_
 export type Challenge = { id: string; created_by: string; white: string | null; white_name: string; black_name: string; time_ms: number; daily_days: number; created_at: string };
 
 export const findPlayers = async (q: string) => ((await supabase.rpc("find_players", { q })).data ?? []) as { id: string; username: string; avatar_url: string | null }[];
-export const addFriend = async (id: string) => {
-  const { data, error } = await supabase.rpc("add_friend", { friend: id });
+/** Tell every friends list / bell on the page to reload now (not only when a live update arrives). */
+export const refreshSocial = () => window.dispatchEvent(new Event("social-refresh"));
+
+// Supabase calls are lazy: they only run when awaited, so every helper awaits and reports errors.
+async function call(fn: string, args: Record<string, unknown>) {
+  const { data, error } = await supabase.rpc(fn, args);
   if (error) throw new Error(error.message);
-  return data as string;
-};
-export const acceptFriend = (request: number) => supabase.rpc("accept_friend", { request });
-export const removeFriend = (request: number) => supabase.rpc("remove_friend", { request });
+  refreshSocial();
+  return data;
+}
+export const addFriend = async (id: string) => (await call("add_friend", { friend: id })) as string;
+export const acceptFriend = (request: number) => call("accept_friend", { request });
+export const removeFriend = (request: number) => call("remove_friend", { request });
 
 /** Runs `load` now and again whenever a matching row changes (live), for the signed-in user. */
 export function useLive<T>(name: string, load: (me: string) => Promise<T>, tables: { table: string; filter: (me: string) => string }[]) {
@@ -27,8 +33,10 @@ export function useLive<T>(name: string, load: (me: string) => Promise<T>, table
     let ch = supabase.channel(`${name}:${user.id}:${Math.random()}`);
     for (const t of tables) ch = ch.on("postgres_changes", { event: "*", schema: "public", table: t.table, filter: t.filter(user.id) }, refresh);
     ch.subscribe();
+    window.addEventListener("social-refresh", refresh);
     return () => {
       alive = false;
+      window.removeEventListener("social-refresh", refresh);
       void supabase.removeChannel(ch);
     };
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
