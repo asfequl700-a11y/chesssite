@@ -29,7 +29,7 @@ const features: {
   bots?: boolean;
 }[] = [
   {
-    title: "Ten bots with their own style",
+    title: "Fifteen bots with their own style",
     text: "From Pip, who just learned how the knight moves, to Atlas at full engine strength. Attackers, defenders and traders, each with something to say.",
     href: "/play/computer",
     cta: "Pick a bot",
@@ -78,7 +78,7 @@ const features: {
 const free = [
   { icon: Search, text: "Unlimited game review" },
   { icon: GraduationCap, text: "Play Coach and move explanations" },
-  { icon: Bot, text: "All 10 bots" },
+  { icon: Bot, text: "All 15 bots" },
   { icon: Timer, text: "Puzzle Rush and unlimited puzzles" },
   { icon: Library, text: "Courses and lessons" },
   { icon: BarChart3, text: "Advanced stats" },

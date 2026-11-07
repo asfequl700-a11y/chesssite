@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { Bot, Search, Timer, Users, Wifi } from "lucide-react";
+import { Bot, Search, Timer, Trophy, Users, Wifi } from "lucide-react";
 import { GameScreen } from "@/components/game-screen";
 
 export const metadata = { title: "Play" };
 
 const options = [
-  { href: "/play/computer", icon: Bot, title: "Play Bots", text: "10 bots from beginner to master, with an optional coach" },
-  { href: "/play/online", icon: Wifi, title: "Play a Friend Online", text: "Send a link, play live from two devices with clocks" },
+  { href: "/play/computer", icon: Bot, title: "Play Bots", text: "15 bots from beginner to master, with an optional coach" },
+  { href: "/play/online", icon: Wifi, title: "Play Online", text: "Rated games vs players near your level, or a friend by link" },
+  { href: "/tournaments", icon: Trophy, title: "Tournaments", text: "Arenas: play as many games as you can, top score wins" },
   { href: "/play/friend", icon: Users, title: "Friend on this device", text: "Two players on one device, with or without a clock" },
   { href: "/puzzles/rush", icon: Timer, title: "Puzzle Rush", text: "Solve as many puzzles as you can in 3 or 5 minutes" },
   { href: "/analysis", icon: Search, title: "Game Review", text: "Unlimited and free: find your best and worst moves" },

@@ -11,7 +11,7 @@ import { BotAvatar } from "@/components/bot-avatar";
 import { ChallengeButton, OnlineDot } from "@/components/friends";
 import { RESULT } from "@/components/my-games";
 import { clockText } from "@/lib/game";
-import { useOngoingGames, usePresence, useFriends } from "@/lib/social";
+import { useMyRatings, useOngoingGames, usePresence, useFriends } from "@/lib/social";
 import { lastWeek, streak } from "@/lib/activity";
 import { BOTS } from "@/lib/bots";
 import { loadCourses, loadProgress, type Course } from "@/lib/courses";
@@ -297,7 +297,11 @@ function FriendsCard() {
 }
 
 function StatsCard({ profile, games, lessons }: { profile: Profile; games: number; lessons: number }) {
+  const r = useMyRatings() ?? {};
   const rows = [
+    ...(["bullet", "blitz", "rapid", "daily"] as const)
+      .filter((k) => r[k])
+      .map((k) => ({ icon: Wifi, label: `${k[0].toUpperCase()}${k.slice(1)} rating`, value: r[k]!.rating })),
     { icon: Swords, label: "Games", value: games },
     { icon: Puzzle, label: "Puzzles solved", value: profile.puzzles_solved },
     { icon: GraduationCap, label: "Lessons", value: lessons },

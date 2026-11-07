@@ -1,7 +1,8 @@
 // Edge Function `online`: the only way to change a live game. Checks who you are, applies the rules
 // in ../_shared/online-rules.ts, and saves. Both players get the change through Supabase Realtime.
 import { createClient } from "@supabase/supabase-js";
-import { applyAction, replay, type Action, type GameRow } from "../_shared/online-rules.ts";
+import { type Action, type GameRow } from "../_shared/online-rules.ts";
+import { act, battleMove, battleState, getRating, kindOf, startBattle, startGame } from "../_shared/server.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
   const now = Date.now();
   // Fair-play ban (set by hand in the Table Editor): no new games or moves.
   const { data: me } = await db.from("profiles").select("banned").eq("id", user.id).maybeSingle();
-  if (me?.banned && ["create", "join", "rematch", "move"].includes(String(body.action)))
+  if (me?.banned && ["create", "join", "rematch", "move", "seek", "arena_join", "arena_pair", "battle_move"].includes(String(body.action)))
     return json({ error: "Your account is under fair-play review, so online play is paused." }, 403);
   const id = typeof body.id === "string" ? body.id : "";
   const name = async (uid: string) => ((await db.from("profiles").select("username").eq("id", uid).maybeSingle()).data?.username as string) ?? "Player";
@@ -111,6 +112,8 @@ Deno.serve(async (req) => {
         .insert({
           created_by: user.id, white: g.black, black: g.white, white_name: g.black_name, black_name: g.white_name,
           status: "active", time_ms: g.time_ms, white_ms: g.time_ms, black_ms: g.time_ms, daily_days: g.daily_days,
+          rated: g.rated, kind: g.kind,
+          ...(g.rated && g.kind ? { white_rating: await getRating(db, String(g.black), g.kind as never), black_rating: await getRating(db, String(g.white), g.kind as never) } : {}),
           ...(g.daily_days ? { turn_started_at: new Date(now).toISOString() } : {}),
         })
         .select("id")
@@ -144,42 +147,126 @@ Deno.serve(async (req) => {
       return json({ ok: true, now });
     }
 
+    // ── Matchmaking: search for an opponent near your rating (the range widens the longer you wait) ──
+    case "seek": {
+      const battle = body.battle === true;
+      const minutes = battle ? 3 : Number(body.minutes ?? 0);
+      const days = battle ? 0 : Number(body.days ?? 0);
+      const kind = battle ? "battle" : kindOf(minutes, days);
+      if (!kind) return json({ error: "Pick a time: 1, 3, 5 or 10 minutes, or 1 or 3 days per move." }, 400);
+      // Already matched? (the other player found me since my last check)
+      const { data: mine } = await db.from("seeks").select("*").eq("user_id", user.id).maybeSingle();
+      if (mine?.status === "matched" && mine.game_id) {
+        await db.from("seeks").delete().eq("user_id", user.id);
+        return json({ [mine.kind === "battle" ? "battle" : "game"]: mine.game_id, now });
+      }
+      if (mine?.status === "matched") return json({ waiting: true, seconds: 0, now }); // being set up right now
+      const rating = await getRating(db, user.id, kind);
+      const same = mine && mine.status === "open" && mine.kind === kind && mine.minutes === minutes && mine.days === days;
+      const since = same ? Date.parse(mine.created_at) : now;
+      await db.from("seeks").upsert({ user_id: user.id, username: await name(user.id), kind, minutes, days, rating, status: "open", game_id: null, created_at: new Date(since).toISOString(), last_seen: new Date(now).toISOString() });
+      // Candidates: same time control, still waiting, closest rating first. A clicked lobby seek ("target") is taken directly.
+      let q = db.from("seeks").select("*").eq("status", "open").eq("kind", kind).eq("minutes", minutes).eq("days", days).neq("user_id", user.id).gt("last_seen", new Date(now - 15000).toISOString());
+      if (typeof body.target === "string") q = q.eq("user_id", body.target);
+      const { data: others } = await q.limit(30);
+      const ranked = (others ?? []).sort((x, y) => Math.abs(x.rating - rating) - Math.abs(y.rating - rating));
+      for (const o of ranked) {
+        const waited = (now - Math.min(since, Date.parse(o.created_at))) / 1000;
+        if (typeof body.target !== "string" && Math.abs(o.rating - rating) > Math.min(1000, 150 + 25 * waited)) continue;
+        // Claim them (only one searcher can win this), and take myself out of the queue.
+        const { data: got } = await db.from("seeks").update({ status: "matched" }).eq("user_id", o.user_id).eq("status", "open").select("user_id");
+        if (!got?.length) continue;
+        await db.from("seeks").delete().eq("user_id", user.id);
+        const gameId = battle ? await startBattle(db, user.id, o.user_id) : await startGame(db, user.id, o.user_id, { minutes, days, rated: true });
+        await db.from("seeks").update({ game_id: gameId }).eq("user_id", o.user_id);
+        return json({ [battle ? "battle" : "game"]: gameId, now });
+      }
+      return json({ waiting: true, seconds: Math.round((now - since) / 1000), rating, now });
+    }
+
+    case "seek_cancel": {
+      await db.from("seeks").delete().eq("user_id", user.id).eq("status", "open");
+      return json({ ok: true, now });
+    }
+
+    // ── Arenas ──
+    case "arena_create": {
+      const minutes = Number(body.minutes);
+      const duration = Number(body.duration);
+      const startIn = Number(body.start_in ?? 0);
+      const title = String(body.name ?? "").trim().slice(0, 60);
+      if (![1, 3, 5, 10].includes(minutes) || ![15, 30, 60].includes(duration) || ![0, 5, 15, 30].includes(startIn) || title.length < 3)
+        return json({ error: "Name (3+ letters), 1/3/5/10 min games, 15/30/60 minutes long, start now or in 5/15/30 minutes." }, 400);
+      const { count } = await db.from("tournaments").select("id", { count: "exact", head: true }).eq("created_by", user.id).gt("ends_at", new Date(now).toISOString());
+      if ((count ?? 0) >= 2) return json({ error: "You already have 2 arenas coming up. Wait for one to finish." }, 400);
+      const starts = now + startIn * 60000;
+      const { data, error } = await db
+        .from("tournaments")
+        .insert({ name: title, minutes, starts_at: new Date(starts).toISOString(), ends_at: new Date(starts + duration * 60000).toISOString(), created_by: user.id })
+        .select("id")
+        .single();
+      return error ? json({ error: error.message }, 500) : json({ id: data.id, now });
+    }
+
+    case "arena_join": {
+      const { data: t } = await db.from("tournaments").select("*").eq("id", id).maybeSingle();
+      if (!t || Date.parse(t.ends_at) < now) return json({ error: "This arena has finished." }, 400);
+      const kind = kindOf(t.minutes, 0)!;
+      const running = Date.parse(t.starts_at) <= now;
+      await db.from("tournament_players").upsert(
+        { tournament_id: id, user_id: user.id, username: await name(user.id), rating: await getRating(db, user.id, kind), active: true, waiting: running, last_seen: new Date(now).toISOString() },
+        { onConflict: "tournament_id,user_id" },
+      );
+      return json({ ok: true, now });
+    }
+
+    case "arena_leave": {
+      await db.from("tournament_players").update({ active: false, waiting: false }).eq("tournament_id", id).eq("user_id", user.id);
+      return json({ ok: true, now });
+    }
+
+    case "arena_pair": {
+      // Called every few seconds by players on the arena page: returns a game when one is ready.
+      const { data: t } = await db.from("tournaments").select("*").eq("id", id).maybeSingle();
+      if (!t) return json({ error: "Arena not found." }, 404);
+      const { data: me2 } = await db.from("tournament_players").select("*").eq("tournament_id", id).eq("user_id", user.id).maybeSingle();
+      if (!me2) return json({ joined: false, now });
+      await db.from("tournament_players").update({ last_seen: new Date(now).toISOString() }).eq("tournament_id", id).eq("user_id", user.id);
+      const { data: live } = await db.from("online_games").select("id").eq("tournament_id", id).eq("status", "active").or(`white.eq.${user.id},black.eq.${user.id}`).limit(1);
+      if (live?.length) return json({ joined: true, game: live[0].id, now });
+      const running = Date.parse(t.starts_at) <= now && Date.parse(t.ends_at) > now;
+      if (!running || !me2.active) return json({ joined: true, running, now });
+      if (!me2.waiting) await db.from("tournament_players").update({ waiting: true }).eq("tournament_id", id).eq("user_id", user.id);
+      const { data: pool } = await db
+        .from("tournament_players")
+        .select("user_id, rating")
+        .eq("tournament_id", id)
+        .eq("active", true)
+        .eq("waiting", true)
+        .neq("user_id", user.id)
+        .gt("last_seen", new Date(now - 15000).toISOString());
+      // Prefer someone you didn't just play, then the closest rating.
+      const pick = (pool ?? []).sort((a, b) => Number(a.user_id === me2.last_opponent) - Number(b.user_id === me2.last_opponent) || Math.abs(a.rating - me2.rating) - Math.abs(b.rating - me2.rating))[0];
+      if (!pick) return json({ joined: true, running, waiting: true, now });
+      const { data: got } = await db.from("tournament_players").update({ waiting: false, last_opponent: user.id }).eq("tournament_id", id).eq("user_id", pick.user_id).eq("waiting", true).select("user_id");
+      if (!got?.length) return json({ joined: true, running, waiting: true, now });
+      await db.from("tournament_players").update({ waiting: false, last_opponent: pick.user_id }).eq("tournament_id", id).eq("user_id", user.id);
+      const gameId = await startGame(db, user.id, pick.user_id, { minutes: t.minutes, days: 0, rated: true, tournament_id: id });
+      return json({ joined: true, game: gameId, now });
+    }
+
+    // ── Puzzle Battle ──
+    case "battle_state":
+      return json({ ...(await battleState(db, id, user.id)), now });
+    case "battle_move":
+      return json({ ...(await battleMove(db, id, user.id, String(body.uci ?? ""))), now });
+
     default: {
       const g = await load();
       if (!g) return json({ error: "Game not found." }, 404);
-      const out = applyAction(g, { ...(body as object), type: body.action } as Action, user.id, now);
-      if ("error" in out) return json({ error: out.error, now }, 400);
-      const patch = { ...out.patch, updated_at: new Date(now).toISOString() };
-      // Only apply if nobody changed the game in the meantime (two requests at once).
-      const { data, error } = await db.from("online_games").update(patch).eq("id", id).eq("updated_at", g.updated_at as string).select("*");
-      if (error) return json({ error: error.message }, 500);
-      if (!data.length) return json({ error: "The game changed. Try again.", now }, 409);
-      const row = data[0];
-      if (row.status === "over" && row.result !== null && g.status === "active") await saveForBoth(db, row);
-      return json({ game: row, now });
+      const out = await act(db, g as GameRow & Record<string, unknown> & { id: string }, { ...(body as object), type: body.action } as Action, user.id, now);
+      if ("error" in out) return json({ error: out.error, now }, "conflict" in out ? 409 : 400);
+      return json({ game: out.game, now });
     }
   }
 });
-
-/** Finished online games go into both players' My games (accuracy is filled in by their browsers). */
-async function saveForBoth(db: ReturnType<typeof createClient>, row: Record<string, unknown>) {
-  const g = replay(row.moves as string[]);
-  g.setHeader("Event", "ChessSite online game");
-  g.setHeader("White", String(row.white_name));
-  g.setHeader("Black", String(row.black_name));
-  const pgn = g.pgn();
-  const tc = row.daily_days ? `${row.daily_days} days/move` : row.time_ms ? `${Number(row.time_ms) / 60000} min` : "none";
-  const ids: Record<string, number> = {};
-  for (const side of ["w", "b"] as const) {
-    const uid = side === "w" ? row.white : row.black;
-    if (!uid) continue;
-    const result = row.result === "draw" ? "draw" : row.result === side ? "win" : "loss";
-    const { data } = await db
-      .from("games")
-      .insert({ user_id: uid, pgn, result, reason: String(row.reason).slice(0, 60), my_color: side, mode: "online", bot: String(side === "w" ? row.black_name : row.white_name).slice(0, 40), time_control: tc })
-      .select("id")
-      .single();
-    if (data) ids[side === "w" ? "white_game_id" : "black_game_id"] = data.id;
-  }
-  await db.from("online_games").update(ids).eq("id", row.id);
-}

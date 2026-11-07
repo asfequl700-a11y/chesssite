@@ -86,7 +86,7 @@ const templates = {
       cta: { href: "{{ .ConfirmationURL }}", label: "Confirm my email" },
       note: "This link works once and expires soon, so use it now.",
       extra: tiles([
-        ["&#129302;", "10 bots", "From beginner to master"],
+        ["&#129302;", "15 bots", "From beginner to master"],
         ["&#129513;", "Puzzles", "Rating, themes, Rush"],
         ["&#128269;", "Game Review", "Unlimited, no paywall"],
       ]),

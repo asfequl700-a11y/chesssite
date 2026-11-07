@@ -15,6 +15,7 @@ import { fillAccuracy } from "@/lib/games";
 import { online, serverNow } from "@/lib/online";
 import { ChallengeButton, OnlineDot } from "@/components/friends";
 import { ReportButton } from "@/components/report-dialog";
+import { QuickPlay } from "@/components/quick-play";
 import { usePresence, useFriends } from "@/lib/social";
 import { supabase, useAccount } from "@/lib/supabase";
 import { isTimed, replay, timeLeft, type GameRow, type Side } from "@/supabase/functions/_shared/online-rules";
@@ -31,6 +32,12 @@ type Row = GameRow & {
   updated_at: string;
   invited: string | null;
   invited_name: string;
+  rated?: boolean;
+  white_rating?: number | null;
+  black_rating?: number | null;
+  white_change?: number | null;
+  black_change?: number | null;
+  tournament_id?: string | null;
 };
 
 const TIMES = [1, 3, 5, 10, 0];
@@ -75,12 +82,15 @@ export function OnlineLobby() {
   };
 
   return (
-    <GameScreen title="Play a Friend Online">
+    <GameScreen title="Play Online">
       {!ready ? null : !user ? (
         <LoginToPlay what="play online" />
       ) : (
         <div className="flex flex-col gap-4">
-          <p className="text-muted-foreground">Create a game, send the link to a friend, and play live from two devices.</p>
+          <QuickPlay />
+          <hr className="border-white/10" />
+          <h2 className="font-sans text-xl font-bold">Play a friend</h2>
+          <p className="-mt-2 text-sm text-muted-foreground">Create a game and send the link, or challenge a friend below. Friend games aren&apos;t rated.</p>
           <div>
             <div className="mb-2 grid grid-cols-2 gap-1 rounded-md bg-card p-1" role="radiogroup" aria-label="Game type">
               {[
@@ -374,13 +384,16 @@ export function OnlineGame({ id }: { id: string }) {
   const nameOf = (s: Side) => (s === "w" ? row.white_name : row.black_name) || "Waiting…";
   const bar = (s: Side) => (
     <PlayerBar
-      name={`${nameOf(s)}${s === me ? " (you)" : ""}`}
+      name={`${nameOf(s)}${(s === "w" ? row.white_rating : row.black_rating) ? ` (${s === "w" ? row.white_rating : row.black_rating})` : ""}${s === me ? " · you" : ""}`}
       color={s}
       fen={g.fen()}
       clock={timed ? { ms: Math.max(0, timeLeft(row, s, serverNow())), running: active && turn === s && (daily || moves.length > 0) } : undefined}
     />
   );
-  const result = row.status === "over" && row.reason !== "cancelled" && row.reason !== "declined" ? { winner: row.result === "draw" ? null : row.result, reason: row.reason } : null;
+  const myChange = me ? (me === "w" ? row.white_change : row.black_change) : null;
+  const ratingNote = myChange !== null && myChange !== undefined ? ` · rating ${myChange >= 0 ? "+" : ""}${myChange}` : "";
+  const result =
+    row.status === "over" && row.reason !== "cancelled" && row.reason !== "declined" ? { winner: row.result === "draw" ? null : row.result, reason: row.reason + ratingNote } : null;
   const title = !result ? "" : row.reason === "aborted" ? "Game aborted" : result.winner === null ? "Draw" : result.winner === me ? "You won!" : "You lost";
   const theyOffered = active && row.draw_offer && row.draw_offer !== me;
 
@@ -396,7 +409,7 @@ export function OnlineGame({ id }: { id: string }) {
               sessionStorage.setItem("review-pgn", replay(row.moves).pgn());
               router.push("/analysis");
             }}
-            onNew={() => router.push("/play/online")}
+            onNew={() => router.push(row.tournament_id ? `/tournaments/${row.tournament_id}` : "/play/online")}
             onRematch={async () => {
               try {
                 const { id: next } = await online<{ id: string }>("rematch", { id });
@@ -417,6 +430,12 @@ export function OnlineGame({ id }: { id: string }) {
     <GameScreen title="Online game" board={board}>
       <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
         <Wifi className="size-4 text-primary" aria-hidden /> {speed}
+        {row.rated ? " · rated" : row.white && row.black ? " · casual" : ""}
+        {row.tournament_id && (
+          <Link href={`/tournaments/${row.tournament_id}`} className="ml-auto font-semibold text-primary hover:underline">
+            Back to arena
+          </Link>
+        )}
       </p>
 
       {row.status === "waiting" && row.invited && (

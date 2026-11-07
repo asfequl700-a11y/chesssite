@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Chess } from "chess.js";
-import { Timer } from "lucide-react";
+import { Swords, Timer } from "lucide-react";
 import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
@@ -168,7 +168,14 @@ export function PuzzleTrainer() {
         </button>
       </div>
 
-      <Link href="/puzzles/rush" className="mt-6 flex items-center gap-3 rounded-md bg-card p-3 hover:bg-accent">
+      <Link href="/puzzles/battle" className="mt-6 flex items-center gap-3 rounded-md bg-card p-3 hover:bg-accent">
+        <Swords className="size-6 text-primary" aria-hidden />
+        <span>
+          <b>Puzzle Battle</b>
+          <span className="block text-sm text-muted-foreground">Race another player live through the same puzzles for 3 minutes.</span>
+        </span>
+      </Link>
+      <Link href="/puzzles/rush" className="mt-2 flex items-center gap-3 rounded-md bg-card p-3 hover:bg-accent">
         <Timer className="size-6 text-primary" aria-hidden />
         <span>
           <b>Puzzle Rush</b>

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { levelInfo } from "@/lib/level";
 import { getProfile, saveBio, uploadAvatar, type PublicProfile } from "@/lib/profiles";
 import { acceptFriend, addFriend, usePresence } from "@/lib/social";
-import { useAccount } from "@/lib/supabase";
+import { supabase, useAccount } from "@/lib/supabase";
 
 function Tile({ label, value }: { label: string; value: string | number }) {
   return (
@@ -30,11 +30,15 @@ export function ProfilePage({ username }: { username: string }) {
   const [error, setError] = useState("");
   const [bio, setBio] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, { rating: number; games: number }>>({});
   const file = useRef<HTMLInputElement>(null);
 
   const load = () =>
     getProfile(username).then(
-      (x) => setP(x),
+      (x) => {
+        setP(x);
+        if (x) void supabase.rpc("player_ratings", { uid: x.id }).then(({ data }) => setRatings((data ?? {}) as typeof ratings));
+      },
       (e) => setError(e.message),
     );
   useEffect(() => {
@@ -176,13 +180,19 @@ export function ProfilePage({ username }: { username: string }) {
         </div>
       </section>
 
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Online ratings">
+        {(["bullet", "blitz", "rapid", "daily"] as const).map((k) => (
+          <Tile key={k} label={`${k[0].toUpperCase()}${k.slice(1)}${ratings[k] ? ` · ${ratings[k].games} games` : ""}`} value={ratings[k]?.rating ?? "—"} />
+        ))}
+      </section>
+
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Online games" value={o.games} />
         <Tile label="Won / drawn / lost" value={`${o.won}/${o.drawn}/${o.lost}`} />
         <Tile label="Puzzle rating" value={p.puzzle_rating} />
         <Tile label="Puzzles solved" value={p.puzzles_solved} />
         <Tile label="Puzzle Rush best" value={p.rush_best} />
-        <Tile label="Bots beaten" value={`${p.bots_beaten} / 10`} />
+        <Tile label="Bots beaten" value={`${p.bots_beaten} / 15`} />
       </section>
 
       <section className="rounded-md bg-panel">

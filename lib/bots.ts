@@ -20,7 +20,7 @@ export type Bot = {
   lines: { hello: string; blunder: string; win: string; lose: string };
 };
 
-export const BOTS: Bot[] = [
+const LIST: Bot[] = [
   {
     id: "pip", name: "Pip", rating: 250, group: "Beginner", style: "balanced", skill: 0, ms: 50, depth: 1, slip: 0.45,
     about: "Just learned how the horsey moves.",
@@ -34,16 +34,34 @@ export const BOTS: Bot[] = [
     lines: { hello: "Charge! Watch out for my queen.", blunder: "Thank you! Free piece!", win: "Attack always works. Mostly.", lose: "Next time I'll attack even harder." },
   },
   {
+    id: "nina", name: "Nina", rating: 800, group: "Beginner", style: "trader", skill: 3, ms: 120, depth: 4, slip: 0.15,
+    about: "Swaps pieces whenever she can.",
+    look: { bg: "#f5b7b1", skin: "#f1c27d", hair: "#5d4037", hairStyle: 1 },
+    lines: { hello: "Let's trade and keep it simple!", blunder: "Ooh, a free one. Thanks!", win: "Simple chess wins again.", lose: "You out-traded me. Nice!" },
+  },
+  {
     id: "otto", name: "Otto", rating: 650, group: "Beginner", style: "defensive", skill: 2, ms: 100, depth: 3, slip: 0.2,
     about: "Builds a wall and waits.",
     look: { bg: "#a9cce3", skin: "#c68642", hair: "#2c3e50", hairStyle: 2, glasses: true },
     lines: { hello: "Safety first. Let's take it slow.", blunder: "Hmm, I believe that piece is loose.", win: "Patience pays off.", lose: "My wall had a hole. Well played." },
   },
   {
+    id: "leo", name: "Leo", rating: 1000, group: "Intermediate", style: "aggressive", skill: 5, ms: 200, depth: 6, slip: 0.08,
+    about: "Pushes pawns at your king.",
+    look: { bg: "#fad7a0", skin: "#e0ac69", hair: "#d35400", hairStyle: 3 },
+    lines: { hello: "Hope you like pawn storms.", blunder: "Ha! I'll take that.", win: "Storm complete.", lose: "My attack ran out of steam. Well played." },
+  },
+  {
     id: "bruno", name: "Bruno", rating: 900, group: "Intermediate", style: "trader", skill: 4, ms: 150, depth: 5, slip: 0.1,
     about: "Loves trading pieces down to an endgame.",
     look: { bg: "#82e0aa", skin: "#8d5524", hair: "#1b1b1b", hairStyle: 3 },
     lines: { hello: "Let's swap some pieces and see who's left.", blunder: "That one's mine, thanks.", win: "Fewer pieces, more fun.", lose: "You traded better than me today." },
+  },
+  {
+    id: "sam", name: "Sam", rating: 1200, group: "Intermediate", style: "defensive", skill: 7, ms: 300, depth: 7, slip: 0.03,
+    about: "Patient. Waits for you to overreach.",
+    look: { bg: "#abebc6", skin: "#8d5524", hair: "#212121", hairStyle: 2 },
+    lines: { hello: "No rush. Take your time.", blunder: "There it is. I was waiting for that.", win: "Patience is a weapon.", lose: "You broke through. Respect." },
   },
   {
     id: "mei", name: "Mei", rating: 1100, group: "Intermediate", style: "balanced", skill: 6, ms: 250, depth: 6, slip: 0.05,
@@ -58,6 +76,12 @@ export const BOTS: Bot[] = [
     lines: { hello: "I hope your king likes company.", blunder: "Oh, now we're attacking!", win: "Checkmate is my favourite move.", lose: "You defended like a pro." },
   },
   {
+    id: "hana", name: "Hana", rating: 1650, group: "Advanced", style: "aggressive", skill: 12, ms: 600, depth: 11, slip: 0,
+    about: "Tactical and fast. Watch your back rank.",
+    look: { bg: "#d2b4de", skin: "#f1c27d", hair: "#1b2631", hairStyle: 1, glasses: true },
+    lines: { hello: "Tactics are my favourite part.", blunder: "Oh, that's a tactic for me!", win: "Combination complete.", lose: "You saw everything. Impressive." },
+  },
+  {
     id: "ines", name: "Inês", rating: 1500, group: "Advanced", style: "defensive", skill: 11, ms: 500, depth: 10, slip: 0,
     about: "Very hard to break down.",
     look: { bg: "#76d7c4", skin: "#e0ac69", hair: "#784212", hairStyle: 2 },
@@ -68,6 +92,12 @@ export const BOTS: Bot[] = [
     about: "Club player. Punishes loose pieces.",
     look: { bg: "#aeb6bf", skin: "#f1c27d", hair: "#7b7d7d", hairStyle: 3, glasses: true },
     lines: { hello: "Shall we? I play to win.", blunder: "That was a mistake. I'll show you why.", win: "Study that endgame. Good game.", lose: "Well played. I'll remember that." },
+  },
+  {
+    id: "orion", name: "Orion", rating: 2300, group: "Master", style: "defensive", skill: 19, ms: 1200, depth: 15, slip: 0,
+    about: "Rock solid. Almost never loses a won position.",
+    look: { bg: "#85c1e9", skin: "#c68642", hair: "#17202a", hairStyle: 3 },
+    lines: { hello: "Show me your best idea.", blunder: "That costs you. I'll convert carefully.", win: "Technique wins games.", lose: "Outstanding play. Truly." },
   },
   {
     id: "zara", name: "Zara", rating: 2100, group: "Master", style: "aggressive", skill: 17, ms: 1000, depth: 14, slip: 0,
@@ -82,6 +112,9 @@ export const BOTS: Bot[] = [
     lines: { hello: "Calculating… ready.", blunder: "Advantage detected.", win: "Game over. Want to review it?", lose: "Remarkable. You beat full strength." },
   },
 ];
+
+/** All bots, weakest first (the list above is kept by character, this keeps the order right). */
+export const BOTS = [...LIST].sort((a, b) => a.rating - b.rating);
 
 const VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 

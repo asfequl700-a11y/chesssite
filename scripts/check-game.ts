@@ -10,6 +10,7 @@ import { levelInfo, levelRating } from "../lib/level.ts";
 import { difficultyFor, eloUpdate, rushDifficulty } from "../lib/puzzles.ts";
 import { lastWeek, streak } from "../lib/streak.ts";
 import { applyAction, timeLeft, type GameRow } from "../supabase/functions/_shared/online-rules.ts";
+import { elo, kindOf } from "../supabase/functions/_shared/server.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -71,8 +72,9 @@ assert.equal(bad(play("e4", "e5", "Ke2"), "Nf3"), "Moving your king gives up cas
 assert.equal(bad(play("rnb1kbnr/ppp2ppp/3p4/4q3/8/8/PPPPQPPP/RNB1KBN1 w Qkq - 0 1", "Qxe5+")), "You're behind in material, so trading pieces makes it harder to come back.");
 assert.equal(good(play("rnb1kbn1/ppp2ppp/3p4/4q3/8/8/PPPPQPPP/RNB1KBNR w KQq - 0 1", "Qxe5+")), "Trading pieces when you're ahead is smart: fewer pieces make the win easier.");
 // Bots: 10 characters, styles rank moves as intended, a "slip" plays a legal random move.
-assert.equal(BOTS.length, 10);
-assert.equal(new Set(BOTS.map((b) => b.id)).size, 10);
+assert.equal(BOTS.length, 15);
+assert.equal(new Set(BOTS.map((b) => b.id)).size, 15);
+assert.deepEqual(BOTS.map((b) => b.rating), [...BOTS.map((b) => b.rating)].sort((a, b) => a - b)); // listed weakest first
 const tactical = "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
 assert.ok(styleScore("aggressive", tactical, "h5f7") > styleScore("aggressive", tactical, "d2d3"));
 assert.ok(styleScore("defensive", tactical, "d2d3") > styleScore("defensive", tactical, "h5f7"));
@@ -126,7 +128,7 @@ assert.equal(err(applyAction(orow({ status: "over" }), { type: "move", uci: "e2e
 // Welcome-screen level: 1 → 400, 100 → 2000; labels by band; nearest bot.
 assert.deepEqual([levelRating(1), levelRating(100), levelRating(50)], [400, 2000, 1192]);
 assert.deepEqual([1, 15, 16, 60, 61, 100].map((l) => levelInfo(l).label), ["New to chess", "New to chess", "Beginner", "Intermediate", "Advanced", "Expert"]);
-assert.deepEqual([botNear(400).id, botNear(1192).id, botNear(2000).id], ["rosa", "mei", "zara"]);
+assert.deepEqual([botNear(400).id, botNear(1192).id, botNear(2000).id], ["rosa", "sam", "zara"]);
 // Daily chess: 1 day per move, resets after each move; time-out after the deadline; move times recorded.
 const daily = (o: Partial<GameRow> = {}) => orow({ time_ms: 0, daily_days: 1, turn_started_at: new Date(T0).toISOString(), ...o });
 assert.equal(timeLeft(daily(), "w", T0 + 3600000), 86400000 - 3600000);
@@ -135,4 +137,10 @@ assert.deepEqual(d1.move_times, [3600000]);
 assert.equal(timeLeft(daily({ ...d1 } as Partial<GameRow>), "b", T0 + 3600000), 86400000); // Black gets a full day
 assert.equal(ok(applyAction(daily(), { type: "flag" }, Bk, T0 + 86400001)).reason, "on time");
 assert.equal(err(applyAction(daily(), { type: "flag" }, Bk, T0 + 86399000)), "No one has run out of time.");
+// Ratings: speeds by time control; Elo moves more for new players and for upsets; a draw between equals changes nothing.
+assert.deepEqual([kindOf(1, 0), kindOf(3, 0), kindOf(5, 0), kindOf(10, 0), kindOf(0, 3), kindOf(0, 0)], ["bullet", "blitz", "blitz", "rapid", "daily", null]);
+assert.deepEqual(elo(1200, 1200, 1, 0, 0), [1220, 1180]);
+assert.deepEqual(elo(1200, 1200, 1, 30, 30), [1210, 1190]);
+assert.deepEqual(elo(1500, 1500, 0.5, 5, 5), [1500, 1500]);
+assert.ok(elo(1000, 1600, 1, 30, 30)[0] - 1000 > 18); // beating a much stronger player
 console.log("game checks passed");

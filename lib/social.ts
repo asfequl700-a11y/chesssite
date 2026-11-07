@@ -134,3 +134,46 @@ export function useOngoingGames() {
     ],
   );
 }
+
+export type Ratings = Partial<Record<"bullet" | "blitz" | "rapid" | "daily", { rating: number; games: number }>>;
+
+/** Your online ratings per speed (empty for guests and before your first rated game). */
+export function useMyRatings() {
+  return useLive(
+    "ratings",
+    async (me) => {
+      const { data } = await supabase.from("ratings").select("kind, rating, games").eq("user_id", me);
+      return Object.fromEntries((data ?? []).map((r) => [r.kind, { rating: r.rating, games: r.games }])) as Ratings;
+    },
+    [],
+  );
+}
+
+export type Seek = { user_id: string; username: string; kind: string; minutes: number; days: number; rating: number; created_at: string };
+
+/** Players waiting for a game right now (the lobby list), refreshed every 3 seconds. */
+export function useOpenSeeks() {
+  const { user } = useAccount();
+  const [seeks, setSeeks] = useState<Seek[] | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    const load = async () => {
+      const { data } = await supabase
+        .from("seeks")
+        .select("user_id, username, kind, minutes, days, rating, created_at")
+        .eq("status", "open")
+        .gt("last_seen", new Date(Date.now() - 15000).toISOString())
+        .order("created_at")
+        .limit(50);
+      if (alive) setSeeks((data ?? []) as Seek[]);
+    };
+    void load();
+    const t = setInterval(() => void load(), 3000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [user]);
+  return seeks;
+}

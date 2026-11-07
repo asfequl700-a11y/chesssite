@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
-import { BarChart3, BookOpen, GraduationCap, History, Library, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
+import { BarChart3, BookOpen, GraduationCap, History, Library, LogOut, Menu, Puzzle, Search, Swords, Trophy, Tv, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/avatar";
 import { ChallengeToast, SocialIcons } from "@/components/notifications";
@@ -17,6 +17,8 @@ const links = [
   { href: "/courses", label: "Courses", icon: Library },
   { href: "/openings", label: "Openings", icon: BookOpen },
   { href: "/analysis", label: "Review", icon: Search },
+  { href: "/tournaments", label: "Tournaments", icon: Trophy },
+  { href: "/watch", label: "Watch", icon: Tv },
 ];
 
 function isActive(pathname: string, href: string) {

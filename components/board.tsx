@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Chessboard, defaultPieces } from "react-chessboard";
 import { Chess, type Square } from "chess.js";
 import { play } from "@/lib/sound";
+import { GEO_PIECES } from "@/lib/geo-pieces";
 import { PIECE_SETS, THEMES, useSettings, type Settings } from "@/lib/settings";
 
 type Arrow = { startSquare: string; endSquare: string; color: string };
@@ -20,6 +21,7 @@ const CHECK = "radial-gradient(circle closest-side, #fa412d 0%, rgba(250,65,45,.
 export function pieceSet(name: Settings["pieces"]) {
   const fills = PIECE_SETS[name];
   if (!fills) return defaultPieces;
+  if (fills === "geo") return GEO_PIECES;
   return Object.fromEntries(
     Object.entries(defaultPieces).map(([k, draw]) => [k, (p?: Parameters<typeof draw>[0]) => draw({ ...p, fill: fills[k[0] as "w" | "b"] })]),
   ) as typeof defaultPieces;

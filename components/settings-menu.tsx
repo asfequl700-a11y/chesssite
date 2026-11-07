@@ -22,7 +22,7 @@ export function SettingsMenu() {
       {open && (
         <div className="absolute top-11 right-0 z-40 w-64 rounded-md bg-card p-4 shadow-[0_8px_24px_rgba(0,0,0,.5)]">
           <p className="mb-2 text-sm font-semibold">Board</p>
-          <div className="mb-4 flex gap-2">
+          <div className="mb-4 flex flex-wrap gap-2">
             {(Object.keys(THEMES) as (keyof typeof THEMES)[]).map((t) => (
               <button
                 key={t}
