@@ -1,5 +1,6 @@
 // Game review math. Win chance + accuracy use Lichess's open formulas (lichess.org/page/accuracy).
 import { Chess, type Move } from "chess.js";
+import { explainBad, explainGood } from "./explain";
 
 export type Label = "brilliant" | "great" | "best" | "excellent" | "good" | "book" | "inaccuracy" | "mistake" | "blunder";
 
@@ -86,27 +87,34 @@ export function sideAccuracy(moves: ReviewedMove[], color: "w" | "b") {
 
 const piece: Record<string, string> = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" };
 
-/** Coach line for a move: our own rules and templates. */
+/** Coach line for a move: our own rules and templates (reasons come from lib/explain.ts). */
 export function coachText(r: ReviewedMove, m: Move, after: Chess): string {
   const name = piece[m.piece];
-  const hanging = m.piece !== "k" && after.attackers(m.to, after.turn()).length > 0 && after.attackers(m.to, m.color).length === 0;
   if (after.isCheckmate()) return `${r.san} is checkmate. Game over.`;
+  const good = () => {
+    const why = explainGood(m, after);
+    return why ? ` ${why}` : "";
+  };
   switch (r.label) {
     case "book":
       return `${r.san} is a known opening move. Thousands of players have played it.`;
     case "brilliant":
-      return `${r.san} is brilliant! You gave up your ${name} and the engine says it works.`;
+      return `${r.san} is brilliant! You gave up your ${name} and the engine says it works.${good()}`;
     case "great":
-      return `${r.san} is great. It was the only move that keeps your position.`;
+      return `${r.san} is great. It was the only move that keeps your position.${good()}`;
     case "best":
-      return `${r.san} is the best move here.`;
+      return `${r.san} is the best move here.${good()}`;
     case "excellent":
-    case "good":
-      return `${r.san} is ${r.label === "good" ? "a good" : "an excellent"} move. The engine liked ${r.bestSan} a little more.`;
+    case "good": {
+      const missed = r.bestSan ? explainBad(m, after, r.bestSan) : null;
+      const base = `${r.san} is ${r.label === "good" ? "a good" : "an excellent"} move.`;
+      return missed?.namesBest ? `${base} ${missed.text}` : `${base}${good()} The engine liked ${r.bestSan} a little more.`;
+    }
     default: {
-      const why = hanging ? ` It leaves your ${name} undefended on ${m.to}.` : "";
+      const why = explainBad(m, after, r.bestSan);
       const a = r.label === "inaccuracy" ? "an" : "a";
-      return `${r.san} is ${a} ${r.label}.${why} Better was ${r.bestSan}.`;
+      const better = r.bestSan && !why?.namesBest ? ` Better was ${r.bestSan}.` : "";
+      return `${r.san} is ${a} ${r.label}.${why ? ` ${why.text}` : ""}${better}`;
     }
   }
 }
