@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Chess } from "chess.js";
 import { captured, clockText, ruleResult } from "../lib/game.ts";
 import { LESSONS } from "../lib/lessons.ts";
+import { accuracySeries, tally, totals } from "../lib/stats.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -30,4 +31,12 @@ for (const l of LESSONS)
     assert.ok(!new Chess(flipped).inCheck(), `${l.slug}: side not to move is in check in ${st.fen}`);
     for (const a of st.answers) assert.doesNotThrow(() => new Chess(st.fen).move(a), `${l.slug}: ${a} is not legal in ${st.fen}`);
   }
+// Stats: tallies per group, "Other" folding, accuracy order.
+const row = (result: "win" | "loss" | "draw", bot: string, accuracy: number | null, played_at: string) =>
+  ({ result, bot, accuracy, played_at, my_color: "w" as const, mode: "computer", opening: null });
+const games = [row("win", "Ana", 80, "2026-01-02"), row("loss", "Ana", null, "2026-01-01"), row("draw", "Bo", 60, "2026-01-01")];
+assert.deepEqual(tally(games, (g) => g.bot)[0], { key: "Ana", win: 1, draw: 0, loss: 1, total: 2 });
+assert.equal(tally(games, (g) => g.bot, 1).at(-1)!.key, "Other");
+assert.deepEqual(accuracySeries(games).map((p) => p.accuracy), [60, 80]);
+assert.equal(totals(games).accuracy, 70);
 console.log("game checks passed");

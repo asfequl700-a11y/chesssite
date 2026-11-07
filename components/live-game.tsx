@@ -10,6 +10,7 @@ import { GameOver, PlayerBar } from "@/components/player-bar";
 import { Button } from "@/components/ui/button";
 import { Engine } from "@/lib/engine";
 import { ruleResult, type Result } from "@/lib/game";
+import { saveGame } from "@/lib/games";
 
 // Bot levels: Stockfish "Skill Level" (0-20) and thinking time in ms.
 const LEVELS = [
@@ -73,6 +74,21 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     engine.current = new Engine();
     return () => engine.current?.quit();
   }, [mode]);
+
+  // Save each finished game once for signed-in players (guests: nothing happens).
+  const saved = useRef<Chess | null>(null);
+  useEffect(() => {
+    if (!result || saved.current === g) return;
+    saved.current = g;
+    void saveGame(g, {
+      result: result.winner === null ? "draw" : result.winner === me ? "win" : "loss",
+      reason: result.reason,
+      my_color: me,
+      mode,
+      bot: mode === "computer" ? LEVELS[level].name : undefined,
+      time_control: timed ? `${minutes} min` : "none",
+    });
+  }, [result, g]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tick the clock; flag a loss on time.
   useEffect(() => {
