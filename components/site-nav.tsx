@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useState } from "react";
 import { BarChart3, BookOpen, GraduationCap, History, Library, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChallengeToast, SocialIcons } from "@/components/notifications";
 import { supabase, useAccount } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,7 @@ export function SiteNav() {
 
   return (
     <>
+      <ChallengeToast />
       {/* Desktop: fixed 170px sidebar */}
       <nav aria-label="Main" className="fixed inset-y-0 left-0 hidden w-[170px] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-2 py-5 lg:flex">
         <div className="px-3">{logo}</div>
@@ -130,6 +132,7 @@ function Account({ close }: { close: () => void }) {
         </span>
         <span className="truncate text-sm font-semibold text-white">{name}</span>
       </div>
+      <SocialIcons close={close} />
       <Link href="/games" onClick={close} className={item}>
         <History className="size-4 text-primary" aria-hidden /> My games
       </Link>

@@ -7,7 +7,9 @@ import { Chess } from "chess.js";
 import { BarChart3, Bot, Flame, GraduationCap, Library, Puzzle, Swords, Timer, Users, Wifi } from "lucide-react";
 import { Board } from "@/components/board";
 import { BotAvatar } from "@/components/bot-avatar";
+import { ChallengeButton, OnlineDot } from "@/components/friends";
 import { RESULT } from "@/components/my-games";
+import { usePresence, useFriends } from "@/lib/social";
 import { lastWeek, streak } from "@/lib/activity";
 import { BOTS } from "@/lib/bots";
 import { loadCourses, loadProgress, type Course } from "@/lib/courses";
@@ -217,6 +219,39 @@ function StreakCard({ profile }: { profile: Profile }) {
   );
 }
 
+function FriendsCard() {
+  const friends = (useFriends() ?? []).filter((f) => f.dir === "friend");
+  const here = usePresence();
+  const top = [...friends].sort((a, b) => Number(here.has(b.id)) - Number(here.has(a.id))).slice(0, 5);
+  return (
+    <section className={card}>
+      <Link href="/friends" className="flex items-center justify-between p-4 hover:text-white">
+        <h2 className="font-sans text-xl font-bold">Friends</h2>
+        <Users className="size-5 text-muted-foreground" aria-hidden />
+      </Link>
+      {!top.length ? (
+        <div className="px-4 pb-4 text-center">
+          <p className="font-semibold">Chess is better with friends!</p>
+          <p className="mb-3 text-sm text-muted-foreground">Add friends and their names will appear here.</p>
+          <Link href="/friends" className="block rounded-lg bg-card py-2.5 font-bold hover:bg-accent">
+            Add Friends
+          </Link>
+        </div>
+      ) : (
+        <ul>
+          {top.map((f) => (
+            <li key={f.id} className="flex items-center gap-3 border-t border-white/5 px-4 py-2.5">
+              <OnlineDot on={here.has(f.id)} />
+              <span className="flex-1 truncate font-semibold">{f.username}</span>
+              <ChallengeButton id={f.id} username={f.username} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function StatsCard({ profile, games, lessons }: { profile: Profile; games: number; lessons: number }) {
   const rows = [
     { icon: Swords, label: "Games", value: games },
@@ -341,6 +376,7 @@ export function Dashboard() {
         <div className="flex flex-col gap-4">
           <DailyPuzzle puzzle={daily} open={openPuzzle} />
           <StreakCard profile={profile} />
+          <FriendsCard />
           <StatsCard profile={profile} games={games?.length ?? 0} lessons={lessons} />
         </div>
       </div>

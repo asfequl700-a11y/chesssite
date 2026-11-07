@@ -38,9 +38,14 @@ Deno.serve(async (req) => {
       if (!TIMES.includes(minutes)) return json({ error: "Pick 1, 3, 5 or 10 minutes, or no clock." }, 400);
       const color = body.color === "random" ? (Math.random() < 0.5 ? "white" : "black") : body.color === "black" ? "black" : "white";
       const ms = minutes * 60000;
+      // Optional direct challenge: only this player may join (they get a notification).
+      const to = typeof body.to === "string" ? body.to : null;
+      if (to === user.id) return json({ error: "You can't challenge yourself." }, 400);
+      const invitedName = to ? await name(to) : "";
+      if (to && invitedName === "Player") return json({ error: "Player not found." }, 404);
       const { data, error } = await db
         .from("online_games")
-        .insert({ created_by: user.id, [color]: user.id, [`${color}_name`]: await name(user.id), time_ms: ms, white_ms: ms, black_ms: ms })
+        .insert({ created_by: user.id, [color]: user.id, [`${color}_name`]: await name(user.id), time_ms: ms, white_ms: ms, black_ms: ms, invited: to, invited_name: invitedName })
         .select("id")
         .single();
       if (error) return json({ error: error.message }, 500);
@@ -51,7 +56,7 @@ Deno.serve(async (req) => {
       // What someone opening an invite link may see before joining.
       const g = await load();
       if (!g) return json({ error: "Game not found. Ask your friend for a new link." }, 404);
-      return json({ status: g.status, time_ms: g.time_ms, host: g.white_name || g.black_name, mine: [g.white, g.black, g.created_by].includes(user.id), now });
+      return json({ status: g.status, time_ms: g.time_ms, host: g.white_name || g.black_name, invited_name: g.invited_name, for_me: !g.invited || g.invited === user.id, mine: [g.white, g.black, g.created_by].includes(user.id), now });
     }
 
     case "join": {
@@ -59,6 +64,7 @@ Deno.serve(async (req) => {
       if (!g) return json({ error: "Game not found." }, 404);
       if (g.status !== "waiting") return json({ error: "Someone already joined this game." }, 409);
       if (g.created_by === user.id) return json({ error: "Send the link to a friend: you can't play yourself." }, 400);
+      if (g.invited && g.invited !== user.id) return json({ error: `This challenge is for ${g.invited_name}.` }, 403);
       const slot = g.white ? "black" : "white";
       const { data, error } = await db
         .from("online_games")
@@ -69,6 +75,11 @@ Deno.serve(async (req) => {
       if (error) return json({ error: error.message }, 500);
       if (!data.length) return json({ error: "Someone already joined this game." }, 409);
       return json({ ok: true, now });
+    }
+
+    case "decline": {
+      const { error } = await db.from("online_games").update({ status: "over", reason: "declined", updated_at: new Date(now).toISOString() }).eq("id", id).eq("invited", user.id).eq("status", "waiting");
+      return error ? json({ error: error.message }, 500) : json({ ok: true, now });
     }
 
     case "cancel": {

@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { markActive } from "@/lib/activity";
 import { fillAccuracy } from "@/lib/games";
 import { online, serverNow } from "@/lib/online";
+import { ChallengeButton, OnlineDot } from "@/components/friends";
+import { usePresence, useFriends } from "@/lib/social";
 import { supabase, useAccount } from "@/lib/supabase";
 import { replay, timeLeft, type GameRow, type Side } from "@/supabase/functions/_shared/online-rules";
 
@@ -26,6 +28,8 @@ type Row = GameRow & {
   white_game_id: number | null;
   black_game_id: number | null;
   updated_at: string;
+  invited: string | null;
+  invited_name: string;
 };
 
 const TIMES = [1, 3, 5, 10, 0];
@@ -110,9 +114,40 @@ export function OnlineLobby() {
           <button className="btn-green w-full py-4! text-xl!" onClick={() => void create()} disabled={busy}>
             {busy ? "Creating…" : "Create game link"}
           </button>
+          <FriendPicker />
         </div>
       )}
     </GameScreen>
+  );
+}
+
+/** Friends to challenge directly (online first), like chess.com's Play a Friend list. */
+function FriendPicker() {
+  const friends = (useFriends() ?? []).filter((f) => f.dir === "friend");
+  const here = usePresence();
+  const sorted = [...friends].sort((a, b) => Number(here.has(b.id)) - Number(here.has(a.id)) || a.username.localeCompare(b.username));
+  return (
+    <section className="mt-2">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="font-sans text-lg font-bold">Or challenge a friend</h2>
+        <Link href="/friends" className="text-sm text-primary hover:underline">
+          Find friends
+        </Link>
+      </div>
+      {!sorted.length ? (
+        <p className="text-sm text-muted-foreground">No friends yet. Add players by username on the Friends page.</p>
+      ) : (
+        <ul className="rounded-md bg-card">
+          {sorted.map((f) => (
+            <li key={f.id} className="flex items-center gap-3 border-t border-white/5 p-3 first:border-t-0">
+              <OnlineDot on={here.has(f.id)} />
+              <span className="flex-1 truncate font-semibold">{f.username}</span>
+              <ChallengeButton id={f.id} username={f.username} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -292,6 +327,26 @@ export function OnlineGame({ id }: { id: string }) {
     );
   if (!row) return <GameScreen title="Online game">Loading…</GameScreen>;
 
+  // A challenge sent to me: accept or decline (chess.com style).
+  if (row.status === "waiting" && row.invited === user.id)
+    return (
+      <GameScreen title="Challenge">
+        <div className="flex flex-col gap-3">
+          <p className="text-lg">
+            <b>{row.white_name || row.black_name}</b> challenges you ({row.time_ms ? `${row.time_ms / 60000} min` : "no clock"}, you play{" "}
+            {row.white ? "Black" : "White"}).
+          </p>
+          {note && <p className="text-destructive">{note}</p>}
+          <button className="btn-green w-full py-4! text-xl!" onClick={() => void online("join", { id }).then(load, (e) => setNote(e.message))}>
+            Accept
+          </button>
+          <Button variant="secondary" onClick={() => void online("decline", { id }).then(() => router.push("/play/online"))}>
+            Decline
+          </Button>
+        </div>
+      </GameScreen>
+    );
+
   const shownGame = view === null ? g : replay(moves.slice(0, view));
   const orientation = (me ?? "w") === "w" !== flip ? "white" : "black";
   const top: Side = orientation === "white" ? "b" : "w";
@@ -304,7 +359,7 @@ export function OnlineGame({ id }: { id: string }) {
       clock={timed ? { ms: Math.max(0, timeLeft(row, s, serverNow())), running: active && turn === s && moves.length > 0 } : undefined}
     />
   );
-  const result = row.status === "over" && row.reason !== "cancelled" ? { winner: row.result === "draw" ? null : row.result, reason: row.reason } : null;
+  const result = row.status === "over" && row.reason !== "cancelled" && row.reason !== "declined" ? { winner: row.result === "draw" ? null : row.result, reason: row.reason } : null;
   const title = !result ? "" : row.reason === "aborted" ? "Game aborted" : result.winner === null ? "Draw" : result.winner === me ? "You won!" : "You lost";
   const theyOffered = active && row.draw_offer && row.draw_offer !== me;
 
@@ -343,7 +398,17 @@ export function OnlineGame({ id }: { id: string }) {
         <Wifi className="size-4 text-primary" aria-hidden /> Live · {timed ? `${row.time_ms / 60000} min` : "no clock"}
       </p>
 
-      {row.status === "waiting" && (
+      {row.status === "waiting" && row.invited && (
+        <div className="mb-4 flex flex-col gap-3 rounded-md bg-card p-4" aria-live="polite">
+          <p className="font-semibold">Challenge sent to {row.invited_name}.</p>
+          <p className="text-sm text-muted-foreground">Waiting for them to accept… They get a notification if they have the site open.</p>
+          <Button variant="ghost" onClick={() => void act("cancel").then(() => router.push("/play/online"))}>
+            Cancel challenge
+          </Button>
+        </div>
+      )}
+
+      {row.status === "waiting" && !row.invited && (
         <div className="mb-4 flex flex-col gap-3 rounded-md bg-card p-4">
           <p className="font-semibold">Send this link to your friend. The game starts when they join.</p>
           <div className="flex gap-2">
@@ -362,6 +427,14 @@ export function OnlineGame({ id }: { id: string }) {
       )}
 
       {row.status === "over" && row.reason === "cancelled" && <p className="mb-4 text-muted-foreground">This game was cancelled.</p>}
+      {row.status === "over" && row.reason === "declined" && (
+        <div className="mb-4 flex flex-col gap-3">
+          <p className="text-muted-foreground">{row.invited === user.id ? "You declined this challenge." : `${row.invited_name} declined your challenge.`}</p>
+          <Link href="/play/online" className="btn-green">
+            New game
+          </Link>
+        </div>
+      )}
 
       {active && (
         <p className="mb-3 text-lg font-semibold" aria-live="polite">
