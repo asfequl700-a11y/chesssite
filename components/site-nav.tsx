@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BookOpen, GraduationCap, Menu, Puzzle, Search, Swords, X } from "lucide-react";
+import { BarChart3, BookOpen, GraduationCap, History, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase, useAccount } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -46,6 +47,8 @@ export function SiteNav() {
     </ul>
   );
 
+  const account = <Account close={() => setOpen(false)} />;
+
   const logo = (
     <Link href="/" onClick={() => setOpen(false)} className="font-heading text-2xl font-bold text-white">
       ChessSite
@@ -58,6 +61,7 @@ export function SiteNav() {
       <nav aria-label="Main" className="fixed inset-y-0 left-0 hidden w-[170px] flex-col gap-6 border-r border-sidebar-border bg-sidebar px-2 py-5 lg:flex">
         <div className="px-3">{logo}</div>
         {menu}
+        <div className="mt-auto">{account}</div>
       </nav>
 
       {/* Phone / tablet: top bar with a menu button */}
@@ -78,9 +82,54 @@ export function SiteNav() {
         {open && (
           <nav id="mobile-menu" aria-label="Main" className="px-2 pb-3">
             {menu}
+            <div className="mt-3 border-t border-sidebar-border pt-3">{account}</div>
           </nav>
         )}
       </header>
     </>
+  );
+}
+
+/** Avatar + username with account links, or Sign up / Log in for guests. Hidden until the session check ends. */
+function Account({ close }: { close: () => void }) {
+  const { user, profile, ready } = useAccount();
+  if (!ready) return <div className="h-24" />;
+  if (!user)
+    return (
+      <div className="flex flex-col gap-2 px-1">
+        <Link href="/signup" onClick={close} className="btn-green py-2! text-base!">
+          Sign up
+        </Link>
+        <Link href="/login" onClick={close} className="rounded-lg bg-sidebar-accent py-2 text-center font-semibold text-white hover:bg-accent">
+          Log in
+        </Link>
+      </div>
+    );
+  const name = profile?.username ?? user.email ?? "";
+  const item = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent hover:text-white";
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 px-2 pb-1">
+        <span className="grid size-8 shrink-0 place-items-center rounded-[3px] bg-primary font-bold text-white" aria-hidden>
+          {name.charAt(0).toUpperCase()}
+        </span>
+        <span className="truncate text-sm font-semibold text-white">{name}</span>
+      </div>
+      <Link href="/games" onClick={close} className={item}>
+        <History className="size-4 text-primary" aria-hidden /> My games
+      </Link>
+      <Link href="/stats" onClick={close} className={item}>
+        <BarChart3 className="size-4 text-primary" aria-hidden /> Stats
+      </Link>
+      <button
+        className={cn(item, "text-left")}
+        onClick={() => {
+          close();
+          void supabase.auth.signOut();
+        }}
+      >
+        <LogOut className="size-4 text-primary" aria-hidden /> Log out
+      </button>
+    </div>
   );
 }
