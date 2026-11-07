@@ -5,6 +5,7 @@ import { captured, clockText, ruleResult } from "../lib/game.ts";
 import { LESSONS } from "../lib/lessons.ts";
 import { accuracySeries, tally, totals } from "../lib/stats.ts";
 import { explainBad, explainGood } from "../lib/explain.ts";
+import { BOTS, botMove, styleScore } from "../lib/bots.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -62,4 +63,12 @@ assert.equal(bad(play("8/8/8/q1k5/8/1K6/8/7R w - - 0 1", "Rh2"), "Rh5+"), "Rh5+ 
 assert.equal(bad(play("e4", "e5", "Ke2"), "Nf3"), "Moving your king gives up castling, so your king may get stuck in the middle.");
 assert.equal(bad(play("rnb1kbnr/ppp2ppp/3p4/4q3/8/8/PPPPQPPP/RNB1KBN1 w Qkq - 0 1", "Qxe5+")), "You're behind in material, so trading pieces makes it harder to come back.");
 assert.equal(good(play("rnb1kbn1/ppp2ppp/3p4/4q3/8/8/PPPPQPPP/RNB1KBNR w KQq - 0 1", "Qxe5+")), "Trading pieces when you're ahead is smart: fewer pieces make the win easier.");
+// Bots: 10 characters, styles rank moves as intended, a "slip" plays a legal random move.
+assert.equal(BOTS.length, 10);
+assert.equal(new Set(BOTS.map((b) => b.id)).size, 10);
+const tactical = "r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
+assert.ok(styleScore("aggressive", tactical, "h5f7") > styleScore("aggressive", tactical, "d2d3"));
+assert.ok(styleScore("defensive", tactical, "d2d3") > styleScore("defensive", tactical, "h5f7"));
+const slip = await botMove(null as never, { ...BOTS[0], slip: 1 }, new Chess().fen(), () => 0);
+assert.doesNotThrow(() => new Chess().move({ from: slip.slice(0, 2), to: slip.slice(2, 4) }));
 console.log("game checks passed");

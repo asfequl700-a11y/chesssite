@@ -15,12 +15,14 @@ export function PlayerBar({
   fen,
   bot,
   clock,
+  avatar,
 }: {
   name: string;
   color: "w" | "b";
   fen: string;
   bot?: boolean;
   clock?: { ms: number; running: boolean };
+  avatar?: React.ReactNode;
 }) {
   const { taken, lead } = captured(fen, color);
   const pieces = pieceSet(useSettings().pieces);
@@ -28,9 +30,11 @@ export function PlayerBar({
   const low = !!clock && clock.ms < 20000;
   return (
     <div className="flex h-10 w-full items-center gap-2">
-      <span className="grid size-10 shrink-0 place-items-center rounded-[3px] bg-card text-muted-foreground">
-        <Icon className="size-6" aria-hidden />
-      </span>
+      {avatar ?? (
+        <span className="grid size-10 shrink-0 place-items-center rounded-[3px] bg-card text-muted-foreground">
+          <Icon className="size-6" aria-hidden />
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-white">{name}</div>
         <div className="flex h-4 items-center" aria-label={`${taken.length} pieces captured${lead ? `, up ${lead}` : ""}`}>

@@ -14,16 +14,12 @@ import { saveGame } from "@/lib/games";
 import { LABELS, fenKey } from "@/lib/review";
 import { judgeMove, openingSet, score } from "@/lib/run-review";
 import { GraduationCap } from "lucide-react";
+import { BotAvatar } from "@/components/bot-avatar";
+import { BotPicker } from "@/components/bot-picker";
+import { BOTS, botMove as pickBotMove } from "@/lib/bots";
+import { winChance } from "@/lib/review";
+import { updateProfile, useAccount } from "@/lib/supabase";
 
-// Bot levels: Stockfish "Skill Level" (0-20) and thinking time in ms.
-const LEVELS = [
-  { name: "Easy", skill: 0, ms: 100 },
-  { name: "Casual", skill: 4, ms: 200 },
-  { name: "Medium", skill: 8, ms: 400 },
-  { name: "Hard", skill: 13, ms: 700 },
-  { name: "Expert", skill: 17, ms: 1000 },
-  { name: "Master", skill: 20, ms: 1500 },
-];
 // Only called from move handlers, never during render.
 const clockNow = () => Date.now();
 const TIMES = [0, 1, 3, 5, 10]; // minutes per side, 0 = no clock (vs friend only)
@@ -57,7 +53,12 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const [fen, setFen] = useState(game.current.fen());
   const [side, setSide] = useState<"white" | "black">("white");
   const [flip, setFlip] = useState(false);
-  const [level, setLevel] = useState(2);
+  const [botId, setBotId] = useState("mei");
+  const bot = BOTS.find((b) => b.id === botId) ?? BOTS[0];
+  const [picking, setPicking] = useState(mode === "computer"); // vs computer starts on the bot list
+  const [chat, setChat] = useState("");
+  const userWin = useRef(50); // your win chance after your last move, to notice blunders for the bot's chat
+  const { profile } = useAccount();
   const [thinking, setThinking] = useState(false);
   const [view, setView] = useState<number | null>(null); // ply being looked at, null = live position
   const [ended, setEnded] = useState<Result | null>(null); // resign, draw agreed, time out
@@ -98,9 +99,12 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
       reason: result.reason,
       my_color: me,
       mode,
-      bot: mode === "computer" ? LEVELS[level].name : undefined,
+      bot: mode === "computer" ? bot.name : undefined,
       time_control: timed ? `${minutes} min` : "none",
     });
+    if (mode !== "computer") return;
+    setChat(result.winner === me ? bot.lines.lose : result.winner ? bot.lines.win : "A draw. Good fight!");
+    if (result.winner === me && profile && !profile.beaten_bots.includes(bot.id)) void updateProfile({ beaten_bots: [...profile.beaten_bots, bot.id] });
   }, [result, g]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tick the clock; flag a loss on time.
@@ -150,8 +154,13 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     if (!e || ng.isGameOver()) return;
     setThinking(true);
     const startFen = ng.fen();
-    const { skill, ms } = LEVELS[level];
-    const uci = await e.bestMove(startFen, skill, ms);
+    // Quick look at the position so the bot can react when you blunder.
+    const { lines } = await e.evaluate(startFen, 8);
+    const sign = me === "w" ? 1 : -1;
+    const win = winChance(sign * lines[0].cp);
+    if (userWin.current - win >= 20 && game.current === ng) setChat(bot.lines.blunder);
+    userWin.current = win;
+    const uci = await pickBotMove(e, bot, startFen);
     setThinking(false);
     // Skip if the position changed (undo / new game) while the engine was thinking.
     if (game.current !== ng || ng.fen() !== startFen || uci === "(none)") return;
@@ -243,6 +252,9 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
     const ng = reset();
     setSide(s);
     setFlip(false);
+    setPicking(false);
+    setChat(bot.lines.hello);
+    userWin.current = 50;
     if (mode === "computer" && s === "black") void botMove(ng);
   };
 
@@ -284,13 +296,14 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const orientation = (side === "white") !== flip ? "white" : "black";
   const top = orientation === "white" ? "b" : "w";
   const bottom = top === "w" ? "b" : "w";
-  const player = (c: "w" | "b") => (mode === "computer" ? (c === me ? "You" : `Computer (${LEVELS[level].name})`) : name(c));
+  const player = (c: "w" | "b") => (mode === "computer" ? (c === me ? (profile?.username ?? "You") : `${bot.name} (${bot.rating})`) : name(c));
   const bar = (c: "w" | "b") => (
     <PlayerBar
       name={player(c)}
       color={c}
       fen={fen}
       bot={mode === "computer" && c !== me}
+      avatar={mode === "computer" && c !== me ? <BotAvatar bot={bot} /> : undefined}
       clock={timed ? { ms: left(c), running: running && g.turn() === c } : undefined}
     />
   );
@@ -343,22 +356,37 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
 
   return (
     <GameScreen title={mode === "computer" ? "Play vs Computer" : "Play vs Friend"} board={board}>
+      {picking ? (
+        <BotPicker
+          selected={botId}
+          beaten={profile?.beaten_bots ?? []}
+          onSelect={setBotId}
+          onPlay={(color) => newGame(color)}
+          onCancel={history.length && !result ? () => setPicking(false) : undefined}
+        />
+      ) : (
+      <>
       <p className="mb-4 text-lg font-semibold" aria-live="polite">
         {result ? `${title} ${result.reason}.` : thinking ? "Computer is thinking…" : statusText(g)}
       </p>
 
-      {mode === "computer" ? (
-        <label className="mb-4 flex items-center gap-3">
-          Level
-          <select value={level} onChange={(e) => setLevel(Number(e.target.value))} className="rounded-md bg-card px-3 py-2">
-            {LEVELS.map((l, i) => (
-              <option key={l.name} value={i}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+      {mode === "computer" && (
+        // Bot speech bubble (chess.com style): avatar + what the bot says.
+        <div className="mb-4 flex items-start gap-3">
+          <BotAvatar bot={bot} size={56} />
+          <div className="flex-1">
+            <p className="mb-1 font-semibold">
+              {bot.name} <span className="text-muted-foreground">{bot.rating}</span>
+            </p>
+            <p className="rounded-lg bg-white px-3 py-2 text-sm text-[#312e2b]" aria-live="polite">
+              {chat || bot.about}
+            </p>
+          </div>
+          <Button variant="secondary" onClick={() => setPicking(true)}>
+            Change bot
+          </Button>
+        </div>
+      )}
 
       {mode === "computer" && (
         <div className="mb-4 rounded-md bg-card p-3">
@@ -473,6 +501,8 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
         <button className="btn-green w-full" onClick={() => review(g)}>
           Review this game
         </button>
+      )}
+      </>
       )}
     </GameScreen>
   );
