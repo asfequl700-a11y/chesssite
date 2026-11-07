@@ -87,11 +87,25 @@ export function AuthForm({ mode: start }: { mode: "login" | "signup" }) {
           {busy ? "Please wait…" : title}
         </button>
 
-        {/* Continue with Google: not enabled yet. Needs a Google Cloud OAuth client added in Supabase → Auth → Providers.
-            Then: supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin } }). */}
+        {/* Google sign-in: Google Cloud OAuth client, switched on in Supabase → Authentication → Sign In / Providers → Google. */}
         {mode !== "forgot" && (
-          <button type="button" disabled className="rounded-lg bg-card py-2.5 font-semibold text-muted-foreground" title="Coming soon">
-            Continue with Google (coming soon)
+          <button
+            type="button"
+            className="flex items-center justify-center gap-2 rounded-lg bg-white py-2.5 font-semibold text-[#1f1f1f] hover:bg-white/90"
+            onClick={async () => {
+              setMsg(null);
+              // The button leaves the site at once, so check first that Google is switched on in Supabase.
+              const settings = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/settings`, {
+                headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "" },
+              })
+                .then((r) => r.json())
+                .catch(() => null);
+              if (!settings?.external?.google) return setMsg({ ok: false, text: "Google sign-in isn't switched on yet. Use email for now." });
+              const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${location.origin}/` } });
+              if (error) setMsg({ ok: false, text: error.message });
+            }}
+          >
+            <GoogleG /> Continue with Google
           </button>
         )}
 
@@ -145,5 +159,17 @@ export function ResetPassword() {
         <button className="btn-green">Save password</button>
       </form>
     </PlainPage>
+  );
+}
+
+/** Google's "G" mark, as Google's sign-in branding rules ask for on Google buttons. */
+function GoogleG() {
+  return (
+    <svg viewBox="0 0 48 48" className="size-5" aria-hidden>
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6.1C12.3 13.6 17.6 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z" />
+      <path fill="#FBBC05" d="M10.4 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.8-6.1C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.7l7.8-6.1z" />
+      <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.8-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.4 0-11.7-4.1-13.6-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z" />
+    </svg>
   );
 }
