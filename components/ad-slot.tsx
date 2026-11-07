@@ -1,6 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import ads from "@/public/ads.json";
+import { runningAds, type Ad } from "@/lib/ads";
 
 const sizes = {
   sidebar: { w: 300, h: 635 },
@@ -8,17 +11,22 @@ const sizes = {
   "review-loading": { w: 300, h: 250 },
 };
 
-// shortcut: booked ads live in public/ads.json (put the image in public/ads/, fill image + link, redeploy).
-// Move to Supabase (with start/end dates) when there are more advertisers than you can swap by hand.
+// Booked ads live in the Supabase "ads" table (slot, image, link, start/end dates). Empty slot = "Advertise here".
 export function AdSlot({ slot, className }: { slot: keyof typeof sizes; className?: string }) {
   const { w, h } = sizes[slot];
-  const ad = (ads as Record<string, { image: string; link: string; text: string }>)[slot];
+  const [ad, setAd] = useState<Ad | null>(null);
+  useEffect(() => {
+    runningAds().then((all) => {
+      const mine = all.filter((a) => a.slot === slot);
+      setAd(mine[Math.floor(Math.random() * mine.length)] ?? null); // several bookings share a slot by rotation
+    });
+  }, [slot]);
   const box = { maxWidth: w, aspectRatio: `${w} / ${h}` };
-  if (ad?.image)
+  if (ad)
     return (
-      <a href={ad.link} target="_blank" rel="noopener sponsored" aria-label={ad.text || "Advertisement"} style={box} className={cn("block w-full overflow-hidden rounded-md", className)}>
+      <a href={ad.link_url} target="_blank" rel="noopener sponsored" aria-label={ad.alt_text || "Advertisement"} style={box} className={cn("block w-full overflow-hidden rounded-md", className)}>
         {/* eslint-disable-next-line @next/next/no-img-element -- advertiser images can be any size/host */}
-        <img src={ad.image} alt={ad.text || "Advertisement"} className="size-full object-cover" />
+        <img src={ad.image_url} alt={ad.alt_text || "Advertisement"} className="size-full object-cover" />
       </a>
     );
   return (
