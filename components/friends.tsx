@@ -28,13 +28,17 @@ export function ChallengeButton({ id, username }: { id: string; username: string
   const [days, setDays] = useState(0);
   const [color, setColor] = useState<"white" | "random" | "black">("random");
   const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
   const send = async () => {
+    if (sending) return; // one tap = one challenge
+    setSending(true);
     setError("");
     try {
       const { id: game } = await online<{ id: string }>("create", days ? { days, color, to: id } : { minutes, color, to: id });
       router.push(`/play/online/${game}`);
     } catch (e) {
       setError((e as Error).message);
+      setSending(false);
     }
   };
   return (
@@ -75,8 +79,8 @@ export function ChallengeButton({ id, username }: { id: string; username: string
             ))}
           </div>
           {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
-          <button className="btn-green w-full py-2! text-base!" onClick={() => void send()}>
-            Send challenge
+          <button className="btn-green w-full py-2! text-base!" onClick={() => void send()} disabled={sending}>
+            {sending ? "Sending…" : "Send challenge"}
           </button>
         </div>
       )}

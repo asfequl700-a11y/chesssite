@@ -49,6 +49,10 @@ Deno.serve(async (req) => {
       if (to === user.id) return json({ error: "You can't challenge yourself." }, 400);
       const invitedName = to ? await name(to) : "";
       if (to && invitedName === "Player") return json({ error: "Player not found." }, 404);
+      // One open challenge per player: a new one replaces any earlier challenge you sent them (no double taps piling up).
+      if (to)
+        await db.from("online_games").update({ status: "over", reason: "cancelled", updated_at: new Date(now).toISOString() })
+          .eq("created_by", user.id).eq("invited", to).eq("status", "waiting");
       const { data, error } = await db
         .from("online_games")
         .insert({ created_by: user.id, [color]: user.id, [`${color}_name`]: await name(user.id), time_ms: ms, white_ms: ms, black_ms: ms, daily_days: days, invited: to, invited_name: invitedName })

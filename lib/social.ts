@@ -62,7 +62,9 @@ export function useChallenges() {
         .eq("invited", me)
         .eq("status", "waiting")
         .order("created_at", { ascending: false });
-      return (data ?? []) as Challenge[];
+      // Old challenges stop showing: live ones after a day, daily ones after a week.
+      const now = Date.now();
+      return ((data ?? []) as Challenge[]).filter((c) => now - Date.parse(c.created_at) < (c.daily_days ? 7 : 1) * 86400000);
     },
     [{ table: "online_games", filter: (me) => `invited=eq.${me}` }],
   );

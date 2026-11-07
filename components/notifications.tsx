@@ -98,7 +98,7 @@ export function SocialIcons({ close }: { close: () => void }) {
       </button>
 
       {open && (
-        <div className="absolute bottom-11 left-0 z-50 w-72 rounded-md bg-card p-2 shadow-[0_8px_24px_rgba(0,0,0,.5)] lg:bottom-auto lg:left-full lg:top-0 lg:ml-2" role="dialog" aria-label="Notifications">
+        <div className="absolute bottom-11 left-0 z-50 max-h-[min(70dvh,480px)] w-72 overflow-y-auto overscroll-contain rounded-md bg-card p-2 shadow-[0_8px_24px_rgba(0,0,0,.5)] lg:bottom-auto lg:left-full lg:top-0 lg:ml-2" role="dialog" aria-label="Notifications">
           {!count && <p className="p-3 text-sm text-muted-foreground">Nothing new.</p>}
           {challenges.map((c) => (
             <div key={c.id} className="flex flex-col gap-2 rounded p-2 hover:bg-panel">
