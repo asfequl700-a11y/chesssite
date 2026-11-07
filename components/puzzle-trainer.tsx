@@ -1,39 +1,55 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Chess } from "chess.js";
+import { Timer } from "lucide-react";
 import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
+import { difficultyFor, eloUpdate, fetchPuzzle, playUci, THEMES, type Puzzle } from "@/lib/puzzles";
+import { updateProfile, useAccount } from "@/lib/supabase";
 
-type Puzzle = { solution: string[]; step: number; rating: number; themes: string[] };
-
-const play = (g: Chess, uci: string) => g.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+/** Puzzle rating: saved on your profile when logged in, in this browser for guests. */
+export function usePuzzleRating() {
+  const { profile } = useAccount();
+  const [guest, setGuest] = useState(1500);
+  useEffect(() => setGuest(Number(localStorage.getItem("puzzle-rating")) || 1500), []);
+  const rating = profile?.puzzle_rating ?? guest;
+  const save = (r: number) => {
+    if (profile) void updateProfile({ puzzle_rating: r });
+    else {
+      localStorage.setItem("puzzle-rating", String(r));
+      setGuest(r);
+    }
+  };
+  return [rating, save] as const;
+}
 
 export function PuzzleTrainer() {
   const game = useRef(new Chess());
-  const puzzle = useRef<Puzzle | null>(null);
+  const puzzle = useRef<(Puzzle & { step: number; failed: boolean; rated: boolean }) | null>(null);
   const [fen, setFen] = useState(game.current.fen());
   const [side, setSide] = useState<"white" | "black">("white");
   const [msg, setMsg] = useState("Loading puzzle…");
   const [hint, setHint] = useState<string | null>(null);
   const [solved, setSolved] = useState(false);
+  const [theme, setTheme] = useState("");
+  const [rating, saveRating] = usePuzzleRating();
+  const [change, setChange] = useState<number | null>(null);
 
-  async function load() {
+  async function load(angle = theme) {
     setMsg("Loading puzzle…");
     setHint(null);
     setSolved(false);
+    setChange(null);
     try {
-      const res = await fetch("https://lichess.org/api/puzzle/next", { headers: { Accept: "application/json" } });
-      if (!res.ok) throw new Error(String(res.status));
-      const data = await res.json();
-      const g = new Chess();
-      g.loadPgn(data.game.pgn); // the board after these moves is the puzzle start
-      game.current = g;
-      puzzle.current = { solution: data.puzzle.solution, step: 0, rating: data.puzzle.rating, themes: data.puzzle.themes };
-      const s = g.turn() === "w" ? "white" : "black";
+      const p = await fetchPuzzle(angle, difficultyFor(rating));
+      game.current = p.game;
+      puzzle.current = { ...p, step: 0, failed: false, rated: false };
+      const s = p.game.turn() === "w" ? "white" : "black";
       setSide(s);
-      setFen(g.fen());
+      setFen(p.game.fen());
       setMsg(`Find the best move for ${s === "white" ? "White" : "Black"}.`);
     } catch {
       setMsg("Could not load a puzzle. Check your internet and try again.");
@@ -42,7 +58,17 @@ export function PuzzleTrainer() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Rate the puzzle once: the first mistake or a hint counts as a fail, a clean solve as a win. */
+  const rate = (won: boolean) => {
+    const p = puzzle.current;
+    if (!p || p.rated) return;
+    p.rated = true;
+    const next = eloUpdate(rating, p.rating, won);
+    setChange(next - rating);
+    saveRating(next);
+  };
 
   const onMove = (from: string, to: string, promotion?: Promo) => {
     const g = game.current;
@@ -57,6 +83,7 @@ export function PuzzleTrainer() {
     // Any checkmate counts, even if it isn't the listed solution move.
     if (move.lan !== p.solution[p.step] && !g.isCheckmate()) {
       g.undo();
+      rate(false);
       setMsg("Not quite. Try again!");
       setFen(g.fen());
       return false;
@@ -64,10 +91,11 @@ export function PuzzleTrainer() {
     p.step++;
     setHint(null);
     if (p.step < p.solution.length && !g.isCheckmate()) {
-      play(g, p.solution[p.step]); // opponent's reply
+      playUci(g, p.solution[p.step]); // opponent's reply
       p.step++;
       setMsg("Correct! Keep going.");
     } else {
+      rate(true);
       setSolved(true);
       setMsg("Solved! 🎉");
     }
@@ -76,19 +104,54 @@ export function PuzzleTrainer() {
   };
 
   const p = puzzle.current;
-  const showHint = () => p && !solved && setHint(p.solution[p.step].slice(0, 2));
+  const showHint = () => {
+    if (!p || solved) return;
+    rate(false);
+    setHint(p.solution[p.step].slice(0, 2));
+  };
 
   return (
     <GameScreen
       title="Puzzles"
       board={<Board game={game.current} fen={fen} orientation={side} onMove={onMove} highlight={hint ? { [hint]: "rgba(38,194,163,.6)" } : undefined} />}
     >
+      <div className="mb-4 flex items-center justify-between rounded-md bg-card p-3">
+        <span className="text-sm text-muted-foreground">Your puzzle rating</span>
+        <span className="text-2xl font-bold tabular-nums">
+          {rating}
+          {change !== null && change !== 0 && (
+            <span className={`ml-2 text-base ${change > 0 ? "text-primary" : "text-[#fa412d]"}`}>
+              {change > 0 ? "+" : ""}
+              {change}
+            </span>
+          )}
+        </span>
+      </div>
+
+      <label className="mb-4 flex items-center gap-3 text-sm">
+        Theme
+        <select
+          value={theme}
+          onChange={(e) => {
+            setTheme(e.target.value);
+            void load(e.target.value);
+          }}
+          className="flex-1 rounded-md bg-card px-3 py-2"
+        >
+          {THEMES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <p className="mb-2 text-lg font-semibold" aria-live="polite">
         {msg}
       </p>
       {p && (
         <p className="mb-4 text-sm text-muted-foreground">
-          Rating {p.rating} · {p.themes.slice(0, 3).join(", ")}
+          Puzzle rating {solved || p.rated ? p.rating : "hidden until you finish"} · {p.themes.slice(0, 3).join(", ")}
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -99,7 +162,15 @@ export function PuzzleTrainer() {
           {solved ? "Next puzzle" : "Skip puzzle"}
         </button>
       </div>
-      <p className="mt-6 text-xs text-muted-foreground">Puzzles from the free Lichess puzzle database.</p>
+
+      <Link href="/puzzles/rush" className="mt-6 flex items-center gap-3 rounded-md bg-card p-3 hover:bg-accent">
+        <Timer className="size-6 text-primary" aria-hidden />
+        <span>
+          <b>Puzzle Rush</b>
+          <span className="block text-sm text-muted-foreground">Solve as many as you can in 3 or 5 minutes. 3 mistakes and you&apos;re out.</span>
+        </span>
+      </Link>
+      <p className="mt-6 text-xs text-muted-foreground">Puzzles from the free Lichess puzzle database. A hint or a wrong move counts as a miss.</p>
     </GameScreen>
   );
 }

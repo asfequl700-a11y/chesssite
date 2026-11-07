@@ -6,6 +6,7 @@ import { LESSONS } from "../lib/lessons.ts";
 import { accuracySeries, tally, totals } from "../lib/stats.ts";
 import { explainBad, explainGood } from "../lib/explain.ts";
 import { BOTS, botMove, styleScore } from "../lib/bots.ts";
+import { difficultyFor, eloUpdate, rushDifficulty } from "../lib/puzzles.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -71,4 +72,12 @@ assert.ok(styleScore("aggressive", tactical, "h5f7") > styleScore("aggressive", 
 assert.ok(styleScore("defensive", tactical, "d2d3") > styleScore("defensive", tactical, "h5f7"));
 const slip = await botMove(null as never, { ...BOTS[0], slip: 1 }, new Chess().fen(), () => 0);
 assert.doesNotThrow(() => new Chess().move({ from: slip.slice(0, 2), to: slip.slice(2, 4) }));
+// Puzzle rating: even match moves 16 points, upsets move more; difficulty follows your rating.
+assert.equal(eloUpdate(1500, 1500, true), 1516);
+assert.equal(eloUpdate(1500, 1500, false), 1484);
+assert.ok(eloUpdate(1500, 1900, true) - 1500 > 16);
+assert.equal(difficultyFor(1500), "normal");
+assert.equal(difficultyFor(800), "easiest");
+assert.equal(difficultyFor(1850), "harder");
+assert.deepEqual([0, 5, 12, 40].map(rushDifficulty), ["easiest", "easier", "normal", "hardest"]);
 console.log("game checks passed");

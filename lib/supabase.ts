@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { createClient, type User } from "@supabase/supabase-js";
 
 // One browser client for the whole site. The login session is kept in localStorage by supabase-js.
@@ -17,9 +17,11 @@ export type Profile = {
   rush_best_5: number;
 };
 
-let current: { user: User | null; profile: Profile | null; ready: boolean } = { user: null, profile: null, ready: false };
-const subs = new Set<(s: typeof current) => void>();
-const emit = () => subs.forEach((f) => f(current));
+type Account = { user: User | null; profile: Profile | null; ready: boolean };
+const SIGNED_OUT: Account = { user: null, profile: null, ready: false };
+let current = SIGNED_OUT;
+const subs = new Set<() => void>();
+const emit = () => subs.forEach((f) => f());
 
 async function loadProfile(user: User | null) {
   const profile = user ? ((await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()).data as Profile | null) : null;
@@ -39,15 +41,17 @@ function start() {
 }
 
 /** Signed-in user and profile (both null for guests). `ready` = the session check has finished. */
+// The server snapshot (signed out) is also used while hydrating, so server and browser HTML match.
 export function useAccount() {
-  const [s, setS] = useState(current);
-  useEffect(() => {
-    start();
-    subs.add(setS);
-    setS(current);
-    return () => void subs.delete(setS);
-  }, []);
-  return s;
+  return useSyncExternalStore(
+    (f) => {
+      start();
+      subs.add(f);
+      return () => void subs.delete(f);
+    },
+    () => current,
+    () => SIGNED_OUT,
+  );
 }
 
 /** Change profile fields of the signed-in user and update every screen that shows them. */
