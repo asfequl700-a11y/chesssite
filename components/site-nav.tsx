@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { BarChart3, BookOpen, GraduationCap, History, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
+import { Suspense, useState } from "react";
+import { BarChart3, BookOpen, GraduationCap, History, Library, LogOut, Menu, Puzzle, Search, Swords, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase, useAccount } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const links = [
   { href: "/play", label: "Play", icon: Swords },
   { href: "/puzzles", label: "Puzzles", icon: Puzzle },
   { href: "/learn", label: "Learn", icon: GraduationCap },
+  { href: "/courses", label: "Courses", icon: Library },
   { href: "/openings", label: "Openings", icon: BookOpen },
   { href: "/analysis", label: "Review", icon: Search },
 ];
@@ -22,17 +23,15 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-export function SiteNav() {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
-  const menu = (
+/** Menu links; the current page is highlighted once its address is known. */
+function Links({ close, pathname = "" }: { close: () => void; pathname?: string }) {
+  return (
     <ul className="flex flex-col gap-1">
       {links.map(({ href, label, icon: Icon }) => (
         <li key={href}>
           <Link
             href={href}
-            onClick={() => setOpen(false)}
+            onClick={close}
             aria-current={isActive(pathname, href) ? "page" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2.5 font-semibold text-sidebar-foreground hover:bg-sidebar-accent hover:text-white",
@@ -45,6 +44,21 @@ export function SiteNav() {
         </li>
       ))}
     </ul>
+  );
+}
+
+function ActiveLinks({ close }: { close: () => void }) {
+  return <Links close={close} pathname={usePathname()} />;
+}
+
+export function SiteNav() {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  // The address is URL data: read it inside <Suspense> so pages can still be prerendered.
+  const menu = (
+    <Suspense fallback={<Links close={close} />}>
+      <ActiveLinks close={close} />
+    </Suspense>
   );
 
   const account = <Account close={() => setOpen(false)} />;

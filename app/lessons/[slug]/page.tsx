@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { GameScreen } from "@/components/game-screen";
-import { LessonPlayer } from "@/components/lesson-player";
+import { LessonPage } from "@/components/lesson-player";
 import { LESSONS } from "@/lib/lessons";
 
 export function generateStaticParams() {
@@ -25,5 +25,5 @@ export default function Page({ params }: PageProps<"/lessons/[slug]">) {
 async function Lesson({ params }: { params: PageProps<"/lessons/[slug]">["params"] }) {
   const { slug } = await params;
   if (!LESSONS.some((l) => l.slug === slug)) notFound();
-  return <LessonPlayer slug={slug} />;
+  return <LessonPage slug={slug} />;
 }

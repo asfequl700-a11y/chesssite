@@ -24,7 +24,7 @@ export function LessonList() {
                 <small className="text-muted-foreground">{l.summary}</small>
               </span>
               <span className={done.includes(l.slug) ? "text-primary" : "text-muted-foreground"}>
-                {done.includes(l.slug) ? "Done" : `${l.steps.length} steps`}
+                {done.includes(l.slug) ? "Done" : `${l.steps.length} ${l.steps.length === 1 ? "step" : "steps"}`}
               </span>
             </Link>
           </li>

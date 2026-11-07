@@ -6,12 +6,40 @@ import { Chess } from "chess.js";
 import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
-import { LESSONS } from "@/lib/lessons";
+import { LESSONS, type Lesson } from "@/lib/lessons";
 
-export function LessonPlayer({ slug }: { slug: string }) {
+/** A lesson from lib/lessons.ts, by its URL name. */
+export function LessonPage({ slug }: { slug: string }) {
   const index = LESSONS.findIndex((l) => l.slug === slug);
-  const lesson = LESSONS[index];
   const nextLesson = LESSONS[index + 1];
+  return (
+    <LessonPlayer
+      key={slug}
+      lesson={LESSONS[index]}
+      onFinish={() => localStorage.setItem(`lesson-done:${slug}`, "1")}
+      next={nextLesson && { href: `/lessons/${nextLesson.slug}`, title: nextLesson.title }}
+      back={{ href: "/learn", label: "All lessons" }}
+    />
+  );
+}
+
+/**
+ * Plays a lesson step by step: each step is a position, an instruction and the accepted answer moves.
+ * Also used for course chapters. Give it a new `key` to start over with another lesson.
+ */
+export function LessonPlayer({
+  lesson,
+  onFinish,
+  next,
+  back,
+  title = lesson.title,
+}: {
+  lesson: Pick<Lesson, "title" | "steps">;
+  onFinish?: () => void;
+  next?: { href?: string; onClick?: () => void; title: string };
+  back: { href: string; label: string; onClick?: (e: React.MouseEvent) => void };
+  title?: string;
+}) {
   const [i, setI] = useState(0);
   const [game, setGame] = useState(() => new Chess(lesson.steps[0].fen));
   const [fen, setFen] = useState(game.fen());
@@ -26,7 +54,7 @@ export function LessonPlayer({ slug }: { slug: string }) {
     setDone(false);
     if (n >= lesson.steps.length) {
       setMsg("Lesson complete! Well done.");
-      localStorage.setItem(`lesson-done:${slug}`, "1");
+      onFinish?.();
       return;
     }
     const g = new Chess(lesson.steps[n].fen);
@@ -58,7 +86,7 @@ export function LessonPlayer({ slug }: { slug: string }) {
   };
 
   return (
-    <GameScreen title={lesson.title} board={<Board game={game} fen={fen} onMove={finished ? undefined : onMove} />}>
+    <GameScreen title={title} board={<Board game={game} fen={fen} onMove={finished ? undefined : onMove} />}>
       <p className="mb-2 text-sm text-muted-foreground">
         {finished ? "Done" : `Step ${i + 1} of ${lesson.steps.length}`}
       </p>
@@ -74,18 +102,24 @@ export function LessonPlayer({ slug }: { slug: string }) {
             Continue
           </button>
         )}
-        {finished && nextLesson && (
-          <Link className="btn-green" href={`/lessons/${nextLesson.slug}`}>
-            Next: {nextLesson.title}
-          </Link>
-        )}
+        {finished &&
+          next &&
+          (next.href ? (
+            <Link className="btn-green" href={next.href} onClick={next.onClick}>
+              Next: {next.title}
+            </Link>
+          ) : (
+            <button className="btn-green" onClick={next.onClick}>
+              Next: {next.title}
+            </button>
+          ))}
         {!finished && (
           <Button variant="secondary" onClick={() => load(i)}>
             Reset
           </Button>
         )}
-        <Link href="/learn" className="self-center px-2 text-sm text-muted-foreground hover:text-white">
-          ← All lessons
+        <Link href={back.href} onClick={back.onClick} className="self-center px-2 text-sm text-muted-foreground hover:text-white">
+          ← {back.label}
         </Link>
       </div>
     </GameScreen>
