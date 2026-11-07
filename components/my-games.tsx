@@ -86,7 +86,7 @@ export function MyGames() {
                 <tr key={g.id} className="border-t border-white/5">
                   <td className="p-3 whitespace-nowrap">{new Date(g.played_at).toLocaleDateString()}</td>
                   <td className="p-3">
-                    {g.mode === "computer" ? g.bot ?? "Computer" : "Friend"}
+                    {g.mode === "friend" ? "Friend" : (g.bot ?? "Computer")}{g.mode === "online" && <span className="ml-1 text-xs text-primary">online</span>}
                     <span className="ml-1 text-muted-foreground">as {g.my_color === "w" ? "White" : "Black"}</span>
                   </td>
                   <td className="p-3 font-semibold whitespace-nowrap">

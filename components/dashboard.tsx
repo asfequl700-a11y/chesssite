@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Chess } from "chess.js";
-import { BarChart3, Bot, Flame, GraduationCap, Library, Puzzle, Swords, Timer, Users } from "lucide-react";
+import { BarChart3, Bot, Flame, GraduationCap, Library, Puzzle, Swords, Timer, Users, Wifi } from "lucide-react";
 import { Board } from "@/components/board";
 import { BotAvatar } from "@/components/bot-avatar";
 import { RESULT } from "@/components/my-games";
@@ -51,6 +51,9 @@ function PlayCard({ go }: { go: (href: string, coach?: boolean) => void }) {
       <button className="btn-green w-full py-4! text-xl!" onClick={() => go("/play/computer")}>
         Start Game
       </button>
+      <button className={btn} onClick={() => go("/play/online")}>
+        <Wifi className="size-6 text-primary" aria-hidden /> Play Online
+      </button>
       <button className={btn} onClick={() => go("/play/computer")}>
         <Bot className="size-6 text-primary" aria-hidden /> Play Bots
       </button>
@@ -58,7 +61,7 @@ function PlayCard({ go }: { go: (href: string, coach?: boolean) => void }) {
         <GraduationCap className="size-6 text-primary" aria-hidden /> Play Coach
       </button>
       <button className={btn} onClick={() => go("/play/friend")}>
-        <Users className="size-6 text-primary" aria-hidden /> Play a Friend
+        <Users className="size-6 text-primary" aria-hidden /> Friend on this device
       </button>
     </section>
   );
@@ -118,7 +121,7 @@ function History({ games, review }: { games: GameRow[]; review: (g: GameRow) => 
             <tbody>
               {games.map((g) => {
                 const bot = BOTS.find((b) => b.name === g.bot);
-                const opp = g.mode === "computer" ? (g.bot ?? "Computer") : "Friend";
+                const opp = g.mode === "friend" ? "Friend" : (g.bot ?? "Computer");
                 const moves = Math.ceil(finalFen(g.pgn).history().length / 2);
                 return (
                   <tr key={g.id} className="border-t border-white/5">
@@ -316,7 +319,7 @@ export function Dashboard() {
             fen={finalFen(last.pgn).fen()}
             orientation={last.my_color === "w" ? "white" : "black"}
             icon={lastBot ? <BotAvatar bot={lastBot} size={36} /> : <Users className="size-8 shrink-0 text-primary" aria-hidden />}
-            title={`vs ${last.mode === "computer" ? (last.bot ?? "Computer") : "Friend"}`}
+            title={`vs ${last.mode === "friend" ? "Friend" : (last.bot ?? "Computer")}`}
             sub={`${RESULT[last.result].text} ${last.reason}`}
             cta="Review Game"
             onClick={() => review(last)}
@@ -366,6 +369,12 @@ export function HomePage() {
   }, [ready, user, router]);
   useEffect(() => {
     if (ready && !user) router.replace("/login");
+    // Opened an invite link while logged out: go back to it after logging in.
+    const back = sessionStorage.getItem("after-login");
+    if (ready && user && back) {
+      sessionStorage.removeItem("after-login");
+      router.replace(back);
+    }
   }, [ready, user, router]);
   return user ? <Dashboard /> : <div className="p-6 text-muted-foreground">Loading…</div>;
 }

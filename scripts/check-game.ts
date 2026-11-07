@@ -8,6 +8,7 @@ import { explainBad, explainGood } from "../lib/explain.ts";
 import { BOTS, botMove, styleScore } from "../lib/bots.ts";
 import { difficultyFor, eloUpdate, rushDifficulty } from "../lib/puzzles.ts";
 import { lastWeek, streak } from "../lib/streak.ts";
+import { applyAction, timeLeft, type GameRow } from "../supabase/functions/_shared/online-rules.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -88,4 +89,34 @@ assert.equal(streak(["2026-11-04"], "2026-11-07"), 0);
 assert.equal(streak(["2026-10-31", "2026-11-01"], "2026-11-01"), 2);
 assert.deepEqual(lastWeek(["2026-11-07"], "2026-11-07").map((d) => d.active), [false, false, false, false, false, false, true]);
 assert.equal(lastWeek([], "2026-11-07").at(-1)!.label, "S"); // 7 Nov 2026 is a Saturday
+// Online rules (server side): turns, legality, clocks, time-outs, draws, abort.
+const W = "white-user", Bk = "black-user", T0 = Date.parse("2026-11-07T10:00:00Z");
+const orow = (o: Partial<GameRow> = {}): GameRow => ({ status: "active", white: W, black: Bk, time_ms: 60000, white_ms: 60000, black_ms: 60000, turn_started_at: null, moves: [], result: null, reason: "", draw_offer: null, ...o });
+const ok = (o: ReturnType<typeof applyAction>) => { assert.ok("patch" in o, "error" in o ? o.error : ""); return (o as { patch: Partial<GameRow> }).patch; };
+const err = (o: ReturnType<typeof applyAction>) => ("error" in o ? o.error : "no error");
+assert.equal(err(applyAction(orow(), { type: "move", uci: "e7e5" }, Bk, T0)), "It's not your turn.");
+assert.equal(err(applyAction(orow(), { type: "move", uci: "e2e5" }, W, T0)), "Illegal move.");
+assert.equal(err(applyAction(orow(), { type: "move", uci: "e2e4" }, "stranger", T0)), "You are not playing in this game.");
+const p1 = ok(applyAction(orow(), { type: "move", uci: "e2e4" }, W, T0));
+assert.equal(p1.white_ms, 60000); // White's first move is free: the clock starts after it
+const r2 = orow({ ...p1 } as Partial<GameRow>);
+const p2 = ok(applyAction(r2, { type: "move", uci: "e7e5" }, Bk, T0 + 5000));
+assert.equal(p2.black_ms, 55000); // Black thought for 5 seconds
+assert.equal(timeLeft(orow({ ...r2 } as Partial<GameRow>), "b", T0 + 61000), -1000);
+assert.equal(err(applyAction(r2, { type: "flag" }, W, T0 + 30000)), "No one has run out of time.");
+assert.deepEqual([ok(applyAction(r2, { type: "flag" }, W, T0 + 61000)).result, ok(applyAction(r2, { type: "flag" }, W, T0 + 61000)).reason], ["w", "on time"]);
+// Fool's mate ends the game by checkmate.
+let fool = orow();
+for (const [u, m] of [[W, "f2f3"], [Bk, "e7e5"], [W, "g2g4"], [Bk, "d8h4"]] as const) fool = orow({ ...fool, ...ok(applyAction(fool, { type: "move", uci: m }, u, T0)) } as Partial<GameRow>);
+assert.deepEqual([fool.status, fool.result, fool.reason], ["over", "b", "by checkmate"]);
+// Draws: offer, then the other side accepts; moving declines it.
+const off = ok(applyAction(orow(), { type: "offer_draw" }, W, T0));
+assert.equal(off.draw_offer, "w");
+assert.equal(ok(applyAction(orow({ draw_offer: "w" }), { type: "accept_draw" }, Bk, T0)).reason, "by agreement");
+assert.equal(err(applyAction(orow({ draw_offer: "w" }), { type: "accept_draw" }, W, T0)), "There is no draw offer to accept.");
+// Abort only in the first two moves; resign any time.
+assert.equal(ok(applyAction(orow({ moves: ["e2e4"] }), { type: "abort" }, Bk, T0)).reason, "aborted");
+assert.equal(err(applyAction(orow({ moves: ["e2e4", "e7e5"] }), { type: "abort" }, W, T0)), "Too late to abort: resign instead.");
+assert.equal(ok(applyAction(orow(), { type: "resign" }, W, T0)).result, "b");
+assert.equal(err(applyAction(orow({ status: "over" }), { type: "move", uci: "e2e4" }, W, T0)), "This game is not being played.");
 console.log("game checks passed");

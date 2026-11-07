@@ -13,7 +13,7 @@ export type GameRow = {
   result: "win" | "loss" | "draw";
   reason: string;
   my_color: "w" | "b";
-  mode: "computer" | "friend";
+  mode: "computer" | "friend" | "online";
   bot: string | null;
   time_control: string;
   accuracy: number | null;
@@ -60,11 +60,16 @@ export async function saveGame(
     .single();
   if (error) return console.warn("Game not saved:", error.message);
   markActive();
+  await fillAccuracy(data.id, g.pgn(), info.my_color);
+}
+
+/** Work out the player's accuracy with a quick engine review and store it on their saved game. */
+export async function fillAccuracy(id: number, pgn: string, color: "w" | "b") {
   const engine = new Engine();
   try {
-    const review = await runReview(g.pgn(), engine, () => {}, 10);
-    const accuracy = Math.round(sideAccuracy(review.moves, info.my_color) * 10) / 10;
-    await supabase.from("games").update({ accuracy }).eq("id", data.id);
+    const review = await runReview(pgn, engine, () => {}, 10);
+    const accuracy = Math.round(sideAccuracy(review.moves, color) * 10) / 10;
+    await supabase.from("games").update({ accuracy }).eq("id", id);
   } catch (e) {
     console.warn("Accuracy not saved:", e);
   } finally {
