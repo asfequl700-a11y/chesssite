@@ -7,6 +7,7 @@ import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { clockText } from "@/lib/game";
 import { fetchPuzzle, playUci, rushDifficulty, type Puzzle } from "@/lib/puzzles";
+import { markActive } from "@/lib/activity";
 import { updateProfile, useAccount } from "@/lib/supabase";
 
 const STRIKES = 3;
@@ -48,6 +49,7 @@ export function PuzzleRush() {
   const finish = (score: number) => {
     setPhase("over");
     setNewBest(score > best);
+    markActive(score);
     saveBest(score);
   };
 

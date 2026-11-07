@@ -7,6 +7,7 @@ import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
 import { LESSONS, type Lesson } from "@/lib/lessons";
+import { markActive } from "@/lib/activity";
 
 /** A lesson from lib/lessons.ts, by its URL name. */
 export function LessonPage({ slug }: { slug: string }) {
@@ -16,7 +17,10 @@ export function LessonPage({ slug }: { slug: string }) {
     <LessonPlayer
       key={slug}
       lesson={LESSONS[index]}
-      onFinish={() => localStorage.setItem(`lesson-done:${slug}`, "1")}
+      onFinish={() => {
+        localStorage.setItem(`lesson-done:${slug}`, "1");
+        markActive();
+      }}
       next={nextLesson && { href: `/lessons/${nextLesson.slug}`, title: nextLesson.title }}
       back={{ href: "/learn", label: "All lessons" }}
     />

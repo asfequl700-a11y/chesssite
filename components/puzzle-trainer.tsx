@@ -7,7 +7,8 @@ import { Timer } from "lucide-react";
 import { Board, type Promo } from "@/components/board";
 import { GameScreen } from "@/components/game-screen";
 import { Button } from "@/components/ui/button";
-import { difficultyFor, eloUpdate, fetchPuzzle, playUci, THEMES, type Puzzle } from "@/lib/puzzles";
+import { difficultyFor, eloUpdate, fetchPuzzle, fetchPuzzleById, playUci, THEMES, type Puzzle } from "@/lib/puzzles";
+import { markActive } from "@/lib/activity";
 import { updateProfile, useAccount } from "@/lib/supabase";
 
 /** Puzzle rating: saved on your profile when logged in, in this browser for guests. */
@@ -44,7 +45,10 @@ export function PuzzleTrainer() {
     setSolved(false);
     setChange(null);
     try {
-      const p = await fetchPuzzle(angle, difficultyFor(rating));
+      // A puzzle picked elsewhere (e.g. the dashboard's daily puzzle) is opened once, then random ones follow.
+      const picked = sessionStorage.getItem("puzzle-id");
+      sessionStorage.removeItem("puzzle-id");
+      const p = picked ? await fetchPuzzleById(picked) : await fetchPuzzle(angle, difficultyFor(rating));
       game.current = p.game;
       puzzle.current = { ...p, step: 0, failed: false, rated: false };
       const s = p.game.turn() === "w" ? "white" : "black";
@@ -65,6 +69,7 @@ export function PuzzleTrainer() {
     const p = puzzle.current;
     if (!p || p.rated) return;
     p.rated = true;
+    markActive(won ? 1 : 0);
     const next = eloUpdate(rating, p.rating, won);
     setChange(next - rating);
     saveRating(next);

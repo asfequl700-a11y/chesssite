@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 
-export type Puzzle = { id: string; game: Chess; solution: string[]; rating: number; themes: string[] };
+export type Puzzle = { id: string; game: Chess; solution: string[]; rating: number; themes: string[]; plays?: number };
 export type Difficulty = "easiest" | "easier" | "normal" | "harder" | "hardest";
 
 // Theme ids from the Lichess puzzle database (sent as the API's `angle` option).
@@ -28,7 +28,17 @@ export async function fetchPuzzle(angle = "", difficulty: Difficulty = "normal")
   const data = await res.json();
   const game = new Chess();
   game.loadPgn(data.game.pgn);
-  return { id: data.puzzle.id, game, solution: data.puzzle.solution, rating: data.puzzle.rating, themes: data.puzzle.themes };
+  return { id: data.puzzle.id, game, solution: data.puzzle.solution, rating: data.puzzle.rating, themes: data.puzzle.themes, plays: data.puzzle.plays };
+}
+
+/** One puzzle by id, or today's daily puzzle (id "daily"). */
+export async function fetchPuzzleById(id: string): Promise<Puzzle> {
+  const res = await fetch(`https://lichess.org/api/puzzle/${encodeURIComponent(id)}`, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(String(res.status));
+  const data = await res.json();
+  const game = new Chess();
+  game.loadPgn(data.game.pgn);
+  return { id: data.puzzle.id, game, solution: data.puzzle.solution, rating: data.puzzle.rating, themes: data.puzzle.themes, plays: data.puzzle.plays };
 }
 
 /** Lichess `difficulty` is relative to 1500 for guests (±300 / ±600 steps): pick the step nearest your rating. */

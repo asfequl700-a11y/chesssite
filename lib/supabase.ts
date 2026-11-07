@@ -15,6 +15,8 @@ export type Profile = {
   beaten_bots: string[];
   rush_best_3: number;
   rush_best_5: number;
+  puzzles_solved: number;
+  active_days: string[]; // "YYYY-MM-DD", local dates
 };
 
 type Account = { user: User | null; profile: Profile | null; ready: boolean };
@@ -55,7 +57,7 @@ export function useAccount() {
 }
 
 /** Change profile fields of the signed-in user and update every screen that shows them. */
-export async function updateProfile(patch: Partial<Pick<Profile, "puzzle_rating" | "beaten_bots" | "rush_best_3" | "rush_best_5">>) {
+export async function updateProfile(patch: Partial<Pick<Profile, "puzzle_rating" | "beaten_bots" | "rush_best_3" | "rush_best_5" | "puzzles_solved" | "active_days">>) {
   const { user, profile } = current;
   if (!user || !profile) return;
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
@@ -63,3 +65,6 @@ export async function updateProfile(patch: Partial<Pick<Profile, "puzzle_rating"
   current = { ...current, profile: { ...profile, ...patch } };
   emit();
 }
+
+/** Current profile (null for guests), for code outside React. */
+export const currentProfile = () => current.profile;

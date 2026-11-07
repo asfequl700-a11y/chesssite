@@ -4,6 +4,7 @@ import { Chess } from "chess.js";
 import { Engine } from "@/lib/engine";
 import { fenKey, sideAccuracy } from "@/lib/review";
 import { runReview } from "@/lib/run-review";
+import { markActive } from "@/lib/activity";
 import { supabase } from "@/lib/supabase";
 
 export type GameRow = {
@@ -58,6 +59,7 @@ export async function saveGame(
     .select("id")
     .single();
   if (error) return console.warn("Game not saved:", error.message);
+  markActive();
   const engine = new Engine();
   try {
     const review = await runReview(g.pgn(), engine, () => {}, 10);

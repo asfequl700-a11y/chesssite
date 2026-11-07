@@ -68,6 +68,11 @@ export function LiveGame({ mode }: { mode: "computer" | "friend" }) {
   const [pm, setPm] = useState<Move | null>(null); // premove, for display
   // Play Coach (vs computer): label + coach line after each of your moves, hints, best-move arrow, blunder warning.
   const [coachOn, setCoachOn] = useState(false);
+  // "Play Coach" on the dashboard opens this page with the coach switched on.
+  useEffect(() => {
+    if (sessionStorage.getItem("coach-on")) setCoachOn(true);
+    sessionStorage.removeItem("coach-on");
+  }, []);
   const [coach, setCoach] = useState<Judged | null>(null);
   const [coachBusy, setCoachBusy] = useState(false);
   const [warn, setWarn] = useState(false); // blunder: waiting for Take back / Continue

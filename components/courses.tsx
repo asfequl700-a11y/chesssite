@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { GameScreen } from "@/components/game-screen";
 import { LessonPlayer } from "@/components/lesson-player";
 import { loadCourses, loadProgress, markDone, type Course } from "@/lib/courses";
+import { markActive } from "@/lib/activity";
 import { useAccount } from "@/lib/supabase";
 
 /** Courses + your progress, reloaded when you log in or out. */
@@ -101,6 +102,7 @@ export function CoursePage({ slug }: { slug: string }) {
         title={`${course.title}: ${ch.title}`}
         onFinish={() => {
           void markDone(signedIn, slug, ch.position);
+          markActive();
           setDone((d) => ({ ...d, [slug]: [...new Set([...(d[slug] ?? []), ch.position])] }));
         }}
         next={nextCh ? { title: nextCh.title, onClick: () => setPlaying(playing + 1) } : { title: "Back to the course", onClick: () => setPlaying(null) }}

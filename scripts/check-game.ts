@@ -7,6 +7,7 @@ import { accuracySeries, tally, totals } from "../lib/stats.ts";
 import { explainBad, explainGood } from "../lib/explain.ts";
 import { BOTS, botMove, styleScore } from "../lib/bots.ts";
 import { difficultyFor, eloUpdate, rushDifficulty } from "../lib/puzzles.ts";
+import { lastWeek, streak } from "../lib/streak.ts";
 
 // White takes a pawn: 1. e4 d5 2. exd5
 const g = new Chess();
@@ -80,4 +81,11 @@ assert.equal(difficultyFor(1500), "normal");
 assert.equal(difficultyFor(800), "easiest");
 assert.equal(difficultyFor(1850), "harder");
 assert.deepEqual([0, 5, 12, 40].map(rushDifficulty), ["easiest", "easier", "normal", "hardest"]);
+// Streak: counts back from today, survives until the end of today if you were active yesterday, crosses months.
+assert.equal(streak(["2026-11-05", "2026-11-06", "2026-11-07"], "2026-11-07"), 3);
+assert.equal(streak(["2026-11-05", "2026-11-06"], "2026-11-07"), 2);
+assert.equal(streak(["2026-11-04"], "2026-11-07"), 0);
+assert.equal(streak(["2026-10-31", "2026-11-01"], "2026-11-01"), 2);
+assert.deepEqual(lastWeek(["2026-11-07"], "2026-11-07").map((d) => d.active), [false, false, false, false, false, false, true]);
+assert.equal(lastWeek([], "2026-11-07").at(-1)!.label, "S"); // 7 Nov 2026 is a Saturday
 console.log("game checks passed");
